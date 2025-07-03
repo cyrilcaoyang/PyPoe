@@ -11,6 +11,15 @@ import uvicorn
 from ..config import get_config, Config
 from ..poe.client import PoeChatClient
 
+# TODO: Add support for remote access of the webpage with username and password protection
+# This would involve:
+# - Adding authentication middleware (e.g., HTTP Basic Auth, session-based auth, or JWT)
+# - User management system with secure password storage
+# - Login/logout endpoints and templates
+# - Session management and CSRF protection
+# - Rate limiting and security headers
+# - Optional: Multi-user support with user-specific conversation isolation
+
 # Check if web dependencies are available
 try:
     import fastapi
@@ -73,6 +82,59 @@ class WebApp:
             except Exception as e:
                 return HTMLResponse(f"Error loading interface: {str(e)}", status_code=500)
         
+        @self.app.get("/history", response_class=HTMLResponse)
+        async def conversation_history(request: Request):
+            """Conversation history browser."""
+            try:
+                conversations = await self.client.get_conversations()
+                
+                # Add message counts and last message info for each conversation
+                for conv in conversations:
+                    messages = await self.client.get_conversation_messages(conv['id'])
+                    conv['message_count'] = len(messages)
+                    conv['last_message'] = messages[-1] if messages else None
+                
+                return self.templates.TemplateResponse(
+                    "history.html",
+                    {
+                        "request": request,
+                        "conversations": conversations
+                    }
+                )
+            except Exception as e:
+                return HTMLResponse(f"Error loading history: {str(e)}", status_code=500)
+        
+        @self.app.get("/conversation/{conversation_id}", response_class=HTMLResponse)
+        async def view_conversation(request: Request, conversation_id: str):
+            """View a specific conversation in detail."""
+            try:
+                # Get conversation details
+                conversations = await self.client.get_conversations()
+                conversation = next((c for c in conversations if c['id'] == conversation_id), None)
+                
+                if not conversation:
+                    raise HTTPException(status_code=404, detail="Conversation not found")
+                
+                # Get messages
+                messages = await self.client.get_conversation_messages(conversation_id)
+                
+                # Add some metadata
+                conversation['message_count'] = len(messages)
+                conversation['word_count'] = sum(len(msg['content'].split()) for msg in messages)
+                
+                return self.templates.TemplateResponse(
+                    "conversation_detail.html",
+                    {
+                        "request": request,
+                        "conversation": conversation,
+                        "messages": messages
+                    }
+                )
+            except Exception as e:
+                if isinstance(e, HTTPException):
+                    raise e
+                return HTMLResponse(f"Error loading conversation: {str(e)}", status_code=500)
+        
         @self.app.post("/api/conversation/new")
         async def create_conversation(
             title: str = Form(...),
@@ -121,6 +183,79 @@ class WebApp:
             try:
                 bots = await self.client.get_available_bots()
                 return JSONResponse(bots)
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=str(e))
+        
+        @self.app.get("/api/conversations/search")
+        async def search_conversations(q: str = "", bot: str = "", limit: int = 50):
+            """Search conversations by title, content, or bot."""
+            try:
+                conversations = await self.client.get_conversations()
+                
+                # Filter by bot if specified
+                if bot:
+                    conversations = [c for c in conversations if c.get('bot_name', '').lower() == bot.lower()]
+                
+                # Search by query in title or content
+                if q:
+                    filtered_conversations = []
+                    for conv in conversations:
+                        # Search in title
+                        if q.lower() in conv.get('title', '').lower():
+                            filtered_conversations.append(conv)
+                            continue
+                        
+                        # Search in message content
+                        messages = await self.client.get_conversation_messages(conv['id'])
+                        for msg in messages:
+                            if q.lower() in msg.get('content', '').lower():
+                                filtered_conversations.append(conv)
+                                break
+                    
+                    conversations = filtered_conversations
+                
+                # Limit results
+                conversations = conversations[:limit]
+                
+                # Add metadata
+                for conv in conversations:
+                    messages = await self.client.get_conversation_messages(conv['id'])
+                    conv['message_count'] = len(messages)
+                    conv['last_message'] = messages[-1] if messages else None
+                
+                return JSONResponse(conversations)
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=str(e))
+        
+        @self.app.get("/api/stats")
+        async def get_stats():
+            """Get conversation statistics."""
+            try:
+                conversations = await self.client.get_conversations()
+                
+                total_conversations = len(conversations)
+                total_messages = 0
+                total_words = 0
+                bot_usage = {}
+                
+                for conv in conversations:
+                    messages = await self.client.get_conversation_messages(conv['id'])
+                    total_messages += len(messages)
+                    
+                    for msg in messages:
+                        total_words += len(msg.get('content', '').split())
+                    
+                    # Count bot usage
+                    bot_name = conv.get('bot_name', 'Unknown')
+                    bot_usage[bot_name] = bot_usage.get(bot_name, 0) + 1
+                
+                return JSONResponse({
+                    "total_conversations": total_conversations,
+                    "total_messages": total_messages,
+                    "total_words": total_words,
+                    "bot_usage": bot_usage,
+                    "avg_messages_per_conversation": total_messages / total_conversations if total_conversations > 0 else 0
+                })
             except Exception as e:
                 raise HTTPException(status_code=500, detail=str(e))
         

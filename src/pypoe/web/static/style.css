@@ -18,9 +18,9 @@ body {
     height: 100vh;
 }
 
-/* Sidebar Styles */
+/* Left Panel: Sidebar Styles */
 .sidebar {
-    width: 320px;
+    width: 350px;
     background: #2c3e50;
     color: white;
     display: flex;
@@ -43,10 +43,122 @@ body {
     color: #3498db;
 }
 
+.sidebar-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 15px;
+    flex-wrap: wrap;
+}
+
+.sidebar-actions .btn {
+    flex: 1;
+    min-width: 0;
+    font-size: 0.85rem;
+    padding: 8px 12px;
+}
+
+/* Search Controls in Sidebar */
+.search-controls {
+    padding: 15px 20px;
+    border-bottom: 1px solid #34495e;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.search-box input {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid #34495e;
+    border-radius: 6px;
+    background: #34495e;
+    color: white;
+    font-size: 0.9rem;
+}
+
+.search-box input::placeholder {
+    color: #bdc3c7;
+}
+
+.search-box input:focus {
+    outline: none;
+    border-color: #3498db;
+    background: #2c3e50;
+}
+
+.filter-select {
+    padding: 8px 12px;
+    border: 1px solid #34495e;
+    border-radius: 6px;
+    background: #34495e;
+    color: white;
+    font-size: 0.9rem;
+}
+
+.filter-select:focus {
+    outline: none;
+    border-color: #3498db;
+    background: #2c3e50;
+}
+
+/* Stats Summary in Sidebar */
+.stats-summary {
+    padding: 10px 20px;
+    border-bottom: 1px solid #34495e;
+    display: flex;
+    justify-content: space-around;
+    background: #34495e;
+}
+
+.stat-item {
+    text-align: center;
+}
+
+.stat-item .stat-number {
+    display: block;
+    font-size: 1.2rem;
+    font-weight: bold;
+    color: #3498db;
+    margin-bottom: 2px;
+}
+
+.stat-item .stat-label {
+    font-size: 0.75rem;
+    color: #bdc3c7;
+    text-transform: uppercase;
+}
+
+/* Remove tab navigation - no longer needed */
+
+/* Empty conversations styling */
+.empty-conversations {
+    text-align: center;
+    padding: 40px 20px;
+    color: #bdc3c7;
+}
+
+.empty-conversations p {
+    margin: 5px 0;
+    font-size: 0.9rem;
+}
+
+.empty-conversations p:first-child {
+    font-weight: 600;
+    color: #95a5a6;
+}
+
+@media (max-width: 768px) {
+    .search-controls {
+        flex-direction: column;
+        align-items: stretch;
+    }
+}
+
 .conversations-list {
     flex: 1;
     overflow-y: auto;
     padding: 10px;
+    min-height: 0; /* Critical for flexbox scrolling */
 }
 
 .conversation-item {
@@ -120,6 +232,7 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    flex-shrink: 0; /* Prevent header from shrinking */
 }
 
 .chat-info h3 {
@@ -151,13 +264,57 @@ body {
     font-size: 0.9rem;
 }
 
+.chat-controls {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.chat-navigation {
+    display: flex;
+    gap: 5px;
+}
+
+.chat-navigation button {
+    padding: 8px 12px;
+    font-size: 14px;
+    min-width: auto;
+}
+
+.chat-navigation button i {
+    font-size: 12px;
+}
+
 /* Messages Container */
 .messages-container {
     flex: 1;
     overflow-y: auto;
     padding: 20px;
     background: #f8f9fa;
+    scroll-behavior: smooth;
+    min-height: 0; /* Critical for flexbox scrolling */
 }
+
+.messages-container::-webkit-scrollbar {
+    width: 12px; /* Make scrollbar more visible for testing */
+}
+
+.messages-container::-webkit-scrollbar-track {
+    background: #e0e0e0;
+    border-radius: 4px;
+}
+
+.messages-container::-webkit-scrollbar-thumb {
+    background: #888;
+    border-radius: 4px;
+}
+
+.messages-container::-webkit-scrollbar-thumb:hover {
+    background: #555;
+}
+
+/* Debug: Uncomment the line below to show container boundaries for testing */
+/* .messages-container { border: 2px solid red; } */
 
 .welcome-message {
     text-align: center;
@@ -270,6 +427,7 @@ body {
     padding: 20px;
     border-top: 1px solid #ecf0f1;
     background: white;
+    flex-shrink: 0; /* Prevent input area from shrinking */
 }
 
 .input-container {
@@ -456,6 +614,16 @@ body {
         flex-direction: column;
         gap: 15px;
         align-items: flex-start;
+    }
+    
+    .chat-controls {
+        width: 100%;
+        justify-content: space-between;
+    }
+    
+    .chat-navigation button {
+        padding: 6px 10px;
+        font-size: 12px;
     }
     
     .message-content {

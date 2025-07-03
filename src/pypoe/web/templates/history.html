@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Conversation History - PyPoe</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .history-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .history-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+        }
+        
+        .search-controls {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        
+        .search-box input {
+            width: 300px;
+            padding: 10px 15px;
+            border: 1px solid #ddd;
+            border-radius: 25px;
+        }
+        
+        .stats-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+        
+        .stat-card {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+        
+        .stat-number {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #3498db;
+        }
+        
+        .conversations-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 20px;
+        }
+        
+        .conversation-card {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            transition: transform 0.3s ease;
+        }
+        
+        .conversation-card:hover {
+            transform: translateY(-5px);
+        }
+    </style>
+</head>
+<body>
+    <div class="history-container">
+        <div class="history-header">
+            <h1><i class="fas fa-history"></i> Conversation History</h1>
+            <a href="/" class="btn btn-secondary">Back to Chat</a>
+        </div>
+
+        <div class="search-controls">
+            <div class="search-box">
+                <input type="text" id="search-input" placeholder="Search conversations...">
+            </div>
+            <select id="bot-filter" class="filter-select">
+                <option value="">All Bots</option>
+            </select>
+        </div>
+
+        <div class="stats-cards" id="stats-cards">
+            <div class="stat-card">
+                <div class="stat-number" id="total-conversations">{{ conversations|length }}</div>
+                <div class="stat-label">Total Conversations</div>
+            </div>
+        </div>
+
+        <div class="conversations-grid">
+            {% for conversation in conversations %}
+            <div class="conversation-card">
+                <h3>{{ conversation.title }}</h3>
+                <p><i class="fas fa-robot"></i> {{ conversation.bot_name }}</p>
+                <p><i class="fas fa-message"></i> {{ conversation.message_count }} messages</p>
+                <p><i class="fas fa-clock"></i> {{ conversation.created_at }}</p>
+                {% if conversation.last_message %}
+                <div class="last-message">
+                    <strong>{{ conversation.last_message.role }}:</strong>
+                    {{ conversation.last_message.content[:100] }}...
+                </div>
+                {% endif %}
+                <a href="/conversation/{{ conversation.id }}" class="btn btn-primary">View Details</a>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</body>
+</html> 

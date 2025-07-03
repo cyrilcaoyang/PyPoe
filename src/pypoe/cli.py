@@ -296,6 +296,61 @@ def web(host, port):
         click.echo(f"❌ Error starting web server: {e}")
 
 @main.command()
+@click.option('--format', 'export_format', default='table', type=click.Choice(['table', 'json']), help='Output format')
+@click.option('--limit', default=10, help='Number of conversations to show')
+def history(export_format, limit):
+    """Show conversation history"""
+    asyncio.run(_history(export_format, limit))
+
+async def _history(export_format: str, limit: int):
+    """Show conversation history with enhanced formatting"""
+    if not HISTORY_AVAILABLE:
+        click.echo("❌ History manager not available")
+        return
+    
+    try:
+        manager = HistoryManager()
+        conversations = await manager.get_conversations()
+        
+        if not conversations:
+            click.echo("📭 No conversations found.")
+            click.echo("💡 Start a chat with --save-history to create conversation history")
+            return
+        
+        # Limit results
+        conversations = conversations[:limit]
+        
+        if export_format == 'json':
+            import json
+            click.echo(json.dumps(conversations, indent=2))
+        else:
+            # Enhanced table format
+            click.echo(f"\n📚 Conversation History (showing {len(conversations)} of {len(await manager.get_conversations())})")
+            click.echo("=" * 80)
+            click.echo(f"{'ID':<10} {'Title':<30} {'Bot':<20} {'Created':<20}")
+            click.echo("-" * 80)
+            
+            for conv in conversations:
+                # Get message count for each conversation
+                messages = await manager.get_conversation_messages(conv['id'])
+                msg_count = len(messages)
+                
+                conv_id = conv['id'][:8] + "..."
+                title = conv.get('title', 'Untitled')[:28] + ('...' if len(conv.get('title', '')) > 28 else '')
+                bot = conv.get('bot_name', 'Unknown')[:18] + ('...' if len(conv.get('bot_name', '')) > 18 else '')
+                created = conv.get('created_at', 'Unknown')[:18]
+                
+                click.echo(f"{conv_id:<10} {title:<30} {bot:<20} {created:<20}")
+                click.echo(f"{'':>10} 💬 {msg_count} messages")
+                click.echo()
+            
+            click.echo(f"💡 Use 'pypoe messages <conversation_id>' to view specific conversation")
+            click.echo(f"💡 Use 'pypoe web' to browse conversations in your browser")
+                    
+    except Exception as e:
+        click.echo(f"❌ Error: {e}", err=True)
+
+@main.command()
 @click.option('--enable-history/--no-history', default=True, help='Enable conversation history')
 @click.option('--socket-mode/--http-mode', default=True, help='Use Socket Mode (dev) vs HTTP mode (prod)')
 def slack_bot(enable_history, socket_mode):

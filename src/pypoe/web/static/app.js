@@ -1,301 +1,454 @@
-class PyPoeChat {
+class PyPoeApp {
     constructor() {
         this.currentConversationId = null;
-        this.currentWebSocket = null;
-        this.isConnected = false;
-        this.currentBotResponse = null;
+        this.websocket = null;
+        this.conversations = [];
+        this.stats = {};
         
-        this.initElements();
+        this.initializeElements();
         this.bindEvents();
-        this.loadConversations();
+        this.loadInitialData();
     }
     
-    initElements() {
+    initializeElements() {
+        // Chat elements
+        this.conversationsList = document.getElementById('conversations-list');
         this.messagesContainer = document.getElementById('messages-container');
         this.messageInput = document.getElementById('message-input');
         this.sendBtn = document.getElementById('send-btn');
-        this.conversationsList = document.getElementById('conversations-list');
         this.currentChatTitle = document.getElementById('current-chat-title');
         this.currentBotName = document.getElementById('current-bot-name');
         this.botSelect = document.getElementById('bot-select');
         this.newChatBtn = document.getElementById('new-chat-btn');
+        
+        // Sidebar elements
+        this.searchInput = document.getElementById('search-input');
+        this.botFilter = document.getElementById('bot-filter');
+        this.totalConversationsEl = document.getElementById('total-conversations');
+        this.totalMessagesEl = document.getElementById('total-messages');
+        
+        // Modal elements
         this.newChatModal = document.getElementById('new-chat-modal');
-        this.newChatForm = document.getElementById('new-chat-form');
     }
     
     bindEvents() {
+        // Chat functionality
         this.sendBtn.addEventListener('click', () => this.sendMessage());
-        this.messageInput.addEventListener('keydown', (e) => {
+        this.messageInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
                 this.sendMessage();
             }
         });
+        this.newChatBtn.addEventListener('click', () => this.showNewChatModal());
         
-        this.newChatBtn.addEventListener('click', () => this.showModal());
-        document.querySelector('.close').addEventListener('click', () => this.hideModal());
-        document.getElementById('cancel-btn').addEventListener('click', () => this.hideModal());
-        this.newChatForm.addEventListener('submit', (e) => this.createConversation(e));
+        // Sidebar functionality
+        this.searchInput.addEventListener('input', () => this.debounceSearch());
+        this.botFilter.addEventListener('change', () => this.filterConversations());
         
-        this.conversationsList.addEventListener('click', (e) => {
-            if (e.target.closest('.delete-btn')) {
-                this.deleteConversation(e.target.closest('.delete-btn').dataset.id);
-            } else if (e.target.closest('.conversation-item')) {
-                this.selectConversation(e.target.closest('.conversation-item').dataset.id);
+        // Auto-resize textarea
+        this.messageInput.addEventListener('input', () => this.autoResizeTextarea());
+        
+        // Global keyboard shortcuts for chat navigation
+        document.addEventListener('keydown', (e) => {
+            // Only handle when not typing in input
+            if (document.activeElement !== this.messageInput && document.activeElement !== this.searchInput) {
+                if (e.key === 'Home') {
+                    e.preventDefault();
+                    this.scrollChatToTop();
+                } else if (e.key === 'End') {
+                    e.preventDefault();
+                    this.scrollToBottom();
+                }
             }
         });
     }
     
-    async loadConversations() {
+    async loadInitialData() {
         try {
+            // Load conversations for sidebar
             const response = await fetch('/api/conversations');
-            const conversations = await response.json();
-            this.renderConversations(conversations);
+            this.conversations = await response.json();
+            this.renderConversationsSidebar();
+            
+            // Load stats for sidebar
+            await this.loadStats();
+            this.populateBotFilter();
         } catch (error) {
-            console.error('Error loading conversations:', error);
+            console.error('Error loading initial data:', error);
         }
     }
     
-    renderConversations(conversations) {
-        this.conversationsList.innerHTML = '';
-        conversations.forEach(conv => {
-            const div = document.createElement('div');
-            div.className = 'conversation-item';
-            div.dataset.id = conv.id;
-            div.innerHTML = `
+    async loadStats() {
+        try {
+            const response = await fetch('/api/stats');
+            this.stats = await response.json();
+            this.updateStats();
+        } catch (error) {
+            console.error('Error loading stats:', error);
+        }
+    }
+
+    updateStats() {
+        if (this.totalConversationsEl) {
+            this.totalConversationsEl.textContent = this.stats.total_conversations || 0;
+        }
+        if (this.totalMessagesEl) {
+            this.totalMessagesEl.textContent = this.stats.total_messages || 0;
+        }
+    }
+    
+    renderConversationsSidebar() {
+        if (!this.conversationsList) return;
+        
+        if (this.conversations.length === 0) {
+            this.conversationsList.innerHTML = `
+                <div class="empty-conversations">
+                    <p>No conversations yet</p>
+                    <p>Click "New Chat" to start</p>
+                </div>
+            `;
+            return;
+        }
+        
+        this.conversationsList.innerHTML = this.conversations.map(conv => `
+            <div class="conversation-item" data-id="${conv.id}">
                 <div class="conversation-info">
                     <h4>${this.escapeHtml(conv.title)}</h4>
                     <p><i class="fas fa-robot"></i> ${this.escapeHtml(conv.bot_name)}</p>
-                    <small>${new Date(conv.created_at).toLocaleString()}</small>
+                    <small>${conv.created_at}</small>
                 </div>
                 <button class="delete-btn" data-id="${conv.id}">
                     <i class="fas fa-trash"></i>
                 </button>
-            `;
-            this.conversationsList.appendChild(div);
-        });
+            </div>
+        `).join('');
+        
+        // Bind conversation events
+        this.bindConversationEvents();
     }
     
     async selectConversation(conversationId) {
-        document.querySelectorAll('.conversation-item').forEach(item => {
-            item.classList.remove('active');
-        });
-        document.querySelector(`[data-id="${conversationId}"]`).classList.add('active');
+        this.currentConversationId = conversationId;
         
+        // Update active conversation in sidebar
+        this.conversationsList.querySelectorAll('.conversation-item').forEach(item => {
+            item.classList.toggle('active', item.dataset.id === conversationId);
+        });
+        
+        // Load conversation details
+        const conv = this.conversations.find(c => c.id === conversationId);
+        if (conv) {
+            this.currentChatTitle.textContent = conv.title;
+            this.currentBotName.textContent = conv.bot_name;
+            this.botSelect.value = conv.bot_name;
+        }
+        
+        // Load messages
+        await this.loadConversationMessages(conversationId);
+        
+        // Enable input
+        this.messageInput.disabled = false;
+        this.sendBtn.disabled = false;
+        this.messageInput.placeholder = 'Type your message here...';
+        
+        // Setup websocket
+        this.setupWebSocket(conversationId);
+    }
+    
+    async loadConversationMessages(conversationId) {
         try {
             const response = await fetch(`/api/conversation/${conversationId}/messages`);
             const messages = await response.json();
             
-            this.currentConversationId = conversationId;
-            const conversationElement = document.querySelector(`[data-id="${conversationId}"]`);
-            const title = conversationElement.querySelector('h4').textContent;
-            const botName = conversationElement.querySelector('p').textContent.replace('🤖 ', '').trim();
+            this.messagesContainer.innerHTML = '';
             
-            this.currentChatTitle.textContent = title;
-            this.currentBotName.textContent = `Bot: ${botName}`;
-            this.botSelect.value = botName;
+            // Add messages without individual scrolling
+            messages.forEach(msg => {
+                const messageDiv = document.createElement('div');
+                messageDiv.className = `message ${msg.role}`;
+                
+                const avatar = document.createElement('div');
+                avatar.className = 'message-avatar';
+                avatar.innerHTML = msg.role === 'user' ? '<i class="fas fa-user"></i>' : '<i class="fas fa-robot"></i>';
+                
+                const contentDiv = document.createElement('div');
+                contentDiv.className = 'message-content';
+                contentDiv.textContent = msg.content;
+                
+                messageDiv.appendChild(avatar);
+                messageDiv.appendChild(contentDiv);
+                this.messagesContainer.appendChild(messageDiv);
+            });
             
-            this.messageInput.disabled = false;
-            this.sendBtn.disabled = false;
-            
-            this.renderMessages(messages);
-            this.connectWebSocket(conversationId);
+            // Scroll to bottom once after all messages are loaded
+            requestAnimationFrame(() => {
+                this.scrollToBottom();
+            });
         } catch (error) {
-            console.error('Error loading conversation:', error);
+            console.error('Error loading messages:', error);
         }
     }
     
-    renderMessages(messages) {
-        this.messagesContainer.innerHTML = '';
-        messages.forEach(msg => this.addMessage(msg.role, msg.content, false));
-        this.scrollToBottom();
-    }
-    
-    addMessage(role, content, animate = true) {
-        const messageDiv = document.createElement('div');
-        messageDiv.className = `message ${role}`;
-        
-        messageDiv.innerHTML = `
-            <div class="message-avatar">
-                <i class="fas fa-${role === 'user' ? 'user' : 'robot'}"></i>
-            </div>
-            <div class="message-content">${this.escapeHtml(content)}</div>
-        `;
-        
-        this.messagesContainer.appendChild(messageDiv);
-        this.scrollToBottom();
-        return messageDiv;
-    }
-    
-    connectWebSocket(conversationId) {
-        if (this.currentWebSocket) this.currentWebSocket.close();
+    setupWebSocket(conversationId) {
+        if (this.websocket) {
+            this.websocket.close();
+        }
         
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const wsUrl = `${protocol}//${window.location.host}/ws/chat/${conversationId}`;
         
-        this.currentWebSocket = new WebSocket(wsUrl);
+        this.websocket = new WebSocket(wsUrl);
         
-        this.currentWebSocket.onopen = () => {
-            this.isConnected = true;
-        };
-        
-        this.currentWebSocket.onmessage = (event) => {
+        this.websocket.onmessage = (event) => {
             const data = JSON.parse(event.data);
             this.handleWebSocketMessage(data);
         };
         
-        this.currentWebSocket.onclose = () => {
-            this.isConnected = false;
+        this.websocket.onerror = (error) => {
+            console.error('WebSocket error:', error);
         };
     }
     
     handleWebSocketMessage(data) {
         switch (data.type) {
+            case 'user_message':
+                this.addMessage(data.content, 'user', false);
+                break;
             case 'bot_response_start':
-                this.hideTypingIndicator();
-                this.currentBotResponse = this.addMessage('assistant', '', true);
+                this.currentBotMessage = this.addMessage('', 'assistant', true);
                 break;
             case 'bot_response_chunk':
-                if (this.currentBotResponse) {
-                    const contentDiv = this.currentBotResponse.querySelector('.message-content');
-                    contentDiv.textContent += data.content;
+                if (this.currentBotMessage) {
+                    this.currentBotMessage.querySelector('.message-content').textContent += data.content;
                     this.scrollToBottom();
                 }
                 break;
             case 'bot_response_end':
-                this.currentBotResponse = null;
-                this.enableInput();
+                this.currentBotMessage = null;
+                this.messageInput.disabled = false;
+                this.sendBtn.disabled = false;
                 break;
             case 'error':
-                this.hideTypingIndicator();
-                this.showError(data.content);
-                this.enableInput();
+                this.addMessage(data.content, 'error', false);
                 break;
         }
     }
     
-    async sendMessage() {
-        const message = this.messageInput.value.trim();
-        if (!message || !this.currentConversationId || !this.isConnected) return;
+    addMessage(content, role, streaming = false) {
+        const messageDiv = document.createElement('div');
+        messageDiv.className = `message ${role}`;
         
-        this.addMessage('user', message, true);
-        this.messageInput.value = '';
-        this.disableInput();
-        this.showTypingIndicator();
+        const avatar = document.createElement('div');
+        avatar.className = 'message-avatar';
+        avatar.innerHTML = role === 'user' ? '<i class="fas fa-user"></i>' : '<i class="fas fa-robot"></i>';
         
-        this.currentWebSocket.send(JSON.stringify({
-            message: message,
-            bot_name: this.botSelect.value
-        }));
-    }
-    
-    showTypingIndicator() {
-        const typingDiv = document.createElement('div');
-        typingDiv.className = 'message assistant';
-        typingDiv.id = 'typing-indicator';
-        typingDiv.innerHTML = `
-            <div class="message-avatar"><i class="fas fa-robot"></i></div>
-            <div class="typing-indicator">
+        const contentDiv = document.createElement('div');
+        contentDiv.className = 'message-content';
+        contentDiv.textContent = content;
+        
+        if (streaming) {
+            const typingIndicator = document.createElement('div');
+            typingIndicator.className = 'typing-indicator';
+            typingIndicator.innerHTML = `
                 <span>Thinking</span>
                 <div class="typing-dots">
                     <span></span><span></span><span></span>
                 </div>
-            </div>
-        `;
-        this.messagesContainer.appendChild(typingDiv);
-        this.scrollToBottom();
+            `;
+            contentDiv.appendChild(typingIndicator);
+        }
+        
+        messageDiv.appendChild(avatar);
+        messageDiv.appendChild(contentDiv);
+        
+        this.messagesContainer.appendChild(messageDiv);
+        
+        // Force layout recalculation and scroll after DOM update
+        requestAnimationFrame(() => {
+            this.scrollToBottom();
+        });
+        
+        return messageDiv;
     }
     
-    hideTypingIndicator() {
-        const indicator = document.getElementById('typing-indicator');
-        if (indicator) indicator.remove();
-    }
-    
-    disableInput() {
+    async sendMessage() {
+        const message = this.messageInput.value.trim();
+        if (!message || !this.currentConversationId) return;
+        
+        this.messageInput.value = '';
         this.messageInput.disabled = true;
         this.sendBtn.disabled = true;
+        
+        if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
+            this.websocket.send(JSON.stringify({
+                message: message,
+                bot_name: this.botSelect.value
+            }));
+        }
+        
+        this.autoResizeTextarea();
     }
-    
-    enableInput() {
-        this.messageInput.disabled = false;
-        this.sendBtn.disabled = false;
-        this.messageInput.focus();
+
+    populateBotFilter() {
+        if (!this.botFilter) return;
+        
+        const bots = [...new Set(this.conversations.map(c => c.bot_name).filter(Boolean))];
+        
+        this.botFilter.innerHTML = '<option value="">All Bots</option>';
+        bots.forEach(bot => {
+            const option = document.createElement('option');
+            option.value = bot;
+            option.textContent = bot;
+            this.botFilter.appendChild(option);
+        });
     }
-    
-    scrollToBottom() {
-        this.messagesContainer.scrollTop = this.messagesContainer.scrollHeight;
+
+    debounceSearch() {
+        clearTimeout(this.searchTimeout);
+        this.searchTimeout = setTimeout(() => this.filterConversations(), 300);
     }
-    
-    showModal() {
-        this.newChatModal.style.display = 'block';
+
+    filterConversations() {
+        const query = this.searchInput?.value.toLowerCase().trim() || '';
+        const botFilter = this.botFilter?.value || '';
+        
+        let filtered = this.conversations;
+        
+        if (botFilter) {
+            filtered = filtered.filter(conv => conv.bot_name === botFilter);
+        }
+        
+        if (query) {
+            filtered = filtered.filter(conv => 
+                conv.title.toLowerCase().includes(query) ||
+                conv.bot_name.toLowerCase().includes(query)
+            );
+        }
+        
+        this.renderFilteredConversations(filtered);
     }
-    
-    hideModal() {
-        this.newChatModal.style.display = 'none';
-        this.newChatForm.reset();
+
+    renderFilteredConversations(filteredConversations) {
+        if (!this.conversationsList) return;
+        
+        if (filteredConversations.length === 0) {
+            this.conversationsList.innerHTML = `
+                <div class="empty-conversations">
+                    <p>No conversations found</p>
+                    <p>Try adjusting your search</p>
+                </div>
+            `;
+            return;
+        }
+        
+        this.conversationsList.innerHTML = filteredConversations.map(conv => `
+            <div class="conversation-item" data-id="${conv.id}">
+                <div class="conversation-info">
+                    <h4>${this.escapeHtml(conv.title)}</h4>
+                    <p><i class="fas fa-robot"></i> ${this.escapeHtml(conv.bot_name)}</p>
+                    <small>${conv.created_at}</small>
+                </div>
+                <button class="delete-btn" data-id="${conv.id}">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </div>
+        `).join('');
+        
+        // Re-bind events for filtered conversations
+        this.bindConversationEvents();
     }
-    
-    async createConversation(e) {
-        e.preventDefault();
-        const formData = new FormData(this.newChatForm);
+
+    bindConversationEvents() {
+        // Bind conversation selection events
+        this.conversationsList.querySelectorAll('.conversation-item').forEach(item => {
+            item.addEventListener('click', (e) => {
+                if (!e.target.closest('.delete-btn')) {
+                    this.selectConversation(item.dataset.id);
+                }
+            });
+        });
+        
+        // Bind delete events
+        this.conversationsList.querySelectorAll('.delete-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.deleteConversation(btn.dataset.id);
+            });
+        });
+    }
+
+    async deleteConversation(conversationId) {
+        if (!confirm('Are you sure you want to delete this conversation?')) return;
         
         try {
-            const response = await fetch('/api/conversation/new', {
-                method: 'POST',
-                body: formData
+            const response = await fetch(`/api/conversation/${conversationId}`, {
+                method: 'DELETE'
             });
-            const result = await response.json();
             
             if (response.ok) {
-                this.hideModal();
-                await this.loadConversations();
-                this.selectConversation(result.conversation_id);
-            }
-        } catch (error) {
-            console.error('Error creating conversation:', error);
-        }
-    }
-    
-    async deleteConversation(conversationId) {
-        if (!confirm('Delete this conversation?')) return;
-        
-        try {
-            await fetch(`/api/conversation/${conversationId}`, { method: 'DELETE' });
-            await this.loadConversations();
-            
-            if (this.currentConversationId === conversationId) {
-                this.clearCurrentChat();
+                // Remove from arrays
+                this.conversations = this.conversations.filter(c => c.id !== conversationId);
+                
+                // Re-render
+                this.renderConversationsSidebar();
+                this.populateBotFilter();
+                await this.loadStats();
+                
+                // Clear chat if this was the active conversation
+                if (this.currentConversationId === conversationId) {
+                    this.currentConversationId = null;
+                    this.messagesContainer.innerHTML = `
+                        <div class="welcome-message">
+                            <i class="fas fa-robot fa-3x"></i>
+                            <h3>Welcome to PyPoe Chat!</h3>
+                            <p>Select a conversation from the sidebar or create a new one to start chatting with AI bots.</p>
+                        </div>
+                    `;
+                    this.currentChatTitle.textContent = 'Select or create a conversation';
+                    this.currentBotName.textContent = 'No bot selected';
+                    this.messageInput.disabled = true;
+                    this.sendBtn.disabled = true;
+                }
             }
         } catch (error) {
             console.error('Error deleting conversation:', error);
         }
     }
     
-    clearCurrentChat() {
-        this.currentConversationId = null;
-        this.currentChatTitle.textContent = 'Select or create a conversation';
-        this.currentBotName.textContent = 'No bot selected';
-        this.messagesContainer.innerHTML = `
-            <div class="welcome-message">
-                <i class="fas fa-robot fa-3x"></i>
-                <h3>Welcome to PyPoe Chat!</h3>
-                <p>Select a conversation from the sidebar or create a new one.</p>
-            </div>
-        `;
-        this.messageInput.disabled = true;
-        this.sendBtn.disabled = true;
-        if (this.currentWebSocket) this.currentWebSocket.close();
+    showNewChatModal() {
+        this.newChatModal.style.display = 'block';
     }
     
-    showError(message) {
-        const errorDiv = document.createElement('div');
-        errorDiv.style.cssText = `
-            position: fixed; top: 20px; right: 20px; background: #e74c3c;
-            color: white; padding: 12px 20px; border-radius: 6px; z-index: 1000;
-        `;
-        errorDiv.textContent = message;
-        document.body.appendChild(errorDiv);
-        setTimeout(() => errorDiv.remove(), 3000);
+    autoResizeTextarea() {
+        this.messageInput.style.height = 'auto';
+        this.messageInput.style.height = Math.min(this.messageInput.scrollHeight, 120) + 'px';
+    }
+    
+    scrollToBottom(containerId = null) {
+        const container = containerId ? document.getElementById(containerId) : this.messagesContainer;
+        if (container) {
+            container.scrollTo({
+                top: container.scrollHeight,
+                behavior: 'smooth'
+            });
+        }
+    }
+    
+    scrollToTop(containerId) {
+        const container = document.getElementById(containerId);
+        if (container) {
+            container.scrollTop = 0;
+        }
+    }
+    
+    scrollChatToTop() {
+        if (this.messagesContainer) {
+            this.messagesContainer.scrollTo({
+                top: 0,
+                behavior: 'smooth'
+            });
+        }
     }
     
     escapeHtml(text) {
@@ -305,4 +458,51 @@ class PyPoeChat {
     }
 }
 
-document.addEventListener('DOMContentLoaded', () => new PyPoeChat()); 
+// Initialize app when DOM is ready
+document.addEventListener('DOMContentLoaded', () => {
+    window.app = new PyPoeApp();
+    
+    // Handle new chat modal (keeping existing functionality)
+    const newChatModal = document.getElementById('new-chat-modal');
+    const newChatForm = document.getElementById('new-chat-form');
+    const closeModalBtns = document.querySelectorAll('.close, #cancel-btn');
+    
+    closeModalBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            newChatModal.style.display = 'none';
+        });
+    });
+    
+    if (newChatForm) {
+        newChatForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            
+            try {
+                const response = await fetch('/api/conversation/new', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                if (result.conversation_id) {
+                    newChatModal.style.display = 'none';
+                    newChatForm.reset();
+                    
+                    // Reload conversations and select the new one
+                    await app.loadInitialData();
+                    app.selectConversation(result.conversation_id);
+                }
+            } catch (error) {
+                console.error('Error creating conversation:', error);
+            }
+        });
+    }
+    
+    // Close modals when clicking outside
+    window.addEventListener('click', (e) => {
+        if (e.target === newChatModal) {
+            newChatModal.style.display = 'none';
+        }
+    });
+}); 
