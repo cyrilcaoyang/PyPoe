@@ -1,11 +1,13 @@
 import asyncio
 import json
+import secrets
 from pathlib import Path
 from typing import List, Dict, Any, Optional
-from fastapi import FastAPI, Request, Form, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Request, Form, HTTPException, WebSocket, WebSocketDisconnect, Depends
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
 import uvicorn
 
 from ..config import get_config, Config
@@ -57,15 +59,32 @@ class WebApp:
         # Mount static files
         self.app.mount("/static", StaticFiles(directory=str(self.static_dir)), name="static")
         
+        # Security
+        self.security = HTTPBasic() if self.config.web_username else None
+        
         # Active WebSocket connections for real-time chat
         self.active_connections: List[WebSocket] = []
         
         self._setup_routes()
     
+    def _check_credentials(self, credentials: HTTPBasicCredentials = Depends(HTTPBasic())):
+        if not self.config.web_username:
+            return
+        correct_username = secrets.compare_digest(credentials.username, self.config.web_username)
+        correct_password = secrets.compare_digest(credentials.password, self.config.web_password)
+        if not (correct_username and correct_password):
+            raise HTTPException(
+                status_code=401,
+                detail="Incorrect email or password",
+                headers={"WWW-Authenticate": "Basic"},
+            )
+    
     def _setup_routes(self):
         """Setup all the routes for the web application."""
         
-        @self.app.get("/", response_class=HTMLResponse)
+        dependencies = [Depends(self._check_credentials)] if self.security else []
+
+        @self.app.get("/", response_class=HTMLResponse, dependencies=dependencies)
         async def index(request: Request):
             """Main chat interface."""
             try:
@@ -82,7 +101,7 @@ class WebApp:
             except Exception as e:
                 return HTMLResponse(f"Error loading interface: {str(e)}", status_code=500)
         
-        @self.app.get("/history", response_class=HTMLResponse)
+        @self.app.get("/history", response_class=HTMLResponse, dependencies=dependencies)
         async def conversation_history(request: Request):
             """Conversation history browser."""
             try:
@@ -104,7 +123,7 @@ class WebApp:
             except Exception as e:
                 return HTMLResponse(f"Error loading history: {str(e)}", status_code=500)
         
-        @self.app.get("/conversation/{conversation_id}", response_class=HTMLResponse)
+        @self.app.get("/conversation/{conversation_id}", response_class=HTMLResponse, dependencies=dependencies)
         async def view_conversation(request: Request, conversation_id: str):
             """View a specific conversation in detail."""
             try:
@@ -135,7 +154,7 @@ class WebApp:
                     raise e
                 return HTMLResponse(f"Error loading conversation: {str(e)}", status_code=500)
         
-        @self.app.post("/api/conversation/new")
+        @self.app.post("/api/conversation/new", dependencies=dependencies)
         async def create_conversation(
             title: str = Form(...),
             bot_name: str = Form(...)
@@ -150,7 +169,7 @@ class WebApp:
             except Exception as e:
                 raise HTTPException(status_code=500, detail=str(e))
         
-        @self.app.get("/api/conversations")
+        @self.app.get("/api/conversations", dependencies=dependencies)
         async def get_conversations():
             """Get all conversations."""
             try:
@@ -159,7 +178,7 @@ class WebApp:
             except Exception as e:
                 raise HTTPException(status_code=500, detail=str(e))
         
-        @self.app.get("/api/conversation/{conversation_id}/messages")
+        @self.app.get("/api/conversation/{conversation_id}/messages", dependencies=dependencies)
         async def get_conversation_messages(conversation_id: str):
             """Get messages for a specific conversation."""
             try:
@@ -168,7 +187,7 @@ class WebApp:
             except Exception as e:
                 raise HTTPException(status_code=500, detail=str(e))
         
-        @self.app.delete("/api/conversation/{conversation_id}")
+        @self.app.delete("/api/conversation/{conversation_id}", dependencies=dependencies)
         async def delete_conversation(conversation_id: str):
             """Delete a conversation."""
             try:
@@ -177,7 +196,7 @@ class WebApp:
             except Exception as e:
                 raise HTTPException(status_code=500, detail=str(e))
         
-        @self.app.get("/api/bots")
+        @self.app.get("/api/bots", dependencies=dependencies)
         async def get_available_bots():
             """Get list of available bots."""
             try:
@@ -186,7 +205,7 @@ class WebApp:
             except Exception as e:
                 raise HTTPException(status_code=500, detail=str(e))
         
-        @self.app.get("/api/conversations/search")
+        @self.app.get("/api/conversations/search", dependencies=dependencies)
         async def search_conversations(q: str = "", bot: str = "", limit: int = 50):
             """Search conversations by title, content, or bot."""
             try:
@@ -227,7 +246,7 @@ class WebApp:
             except Exception as e:
                 raise HTTPException(status_code=500, detail=str(e))
         
-        @self.app.get("/api/stats")
+        @self.app.get("/api/stats", dependencies=dependencies)
         async def get_stats():
             """Get conversation statistics."""
             try:
@@ -326,6 +345,9 @@ class WebApp:
 
 def create_app(config: Config = None) -> FastAPI:
     """Factory function to create the FastAPI app."""
+    if not WEB_AVAILABLE:
+        raise RuntimeError("Web UI dependencies not installed.")
+    
     web_app = WebApp(config)
     return web_app.app
 

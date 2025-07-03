@@ -9,8 +9,9 @@ users/
 ├── pypoe.env.example          # Environment template file
 ├── basic_usage.py             # Simple usage example
 ├── setup/                     # One-time setup files
+│   ├── setup_credentials.py   # API key setup utility
+│   ├── setup_webui.py         # Web UI authentication setup
 │   └── slack_setup.md         # Complete Slack bot setup guide
-│   └── setup_credentials.py   # API key setup utility
 └── history/                   # Local database storage (git-ignored)
     └── conversations.db       # SQLite database (created at runtime)
 ```
@@ -31,16 +32,20 @@ cp users/pypoe.env.example .env
 # Basic installation (CLI + API client)
 pip install -e .
 
-# With Slack bot support
-pip install -e ".[slackbot]"
+# With web interface
+pip install -e ".[web-ui]"
 
-# With everything
+# With everything (includes Slack bot)
 pip install -e ".[all]"
 ```
 
 ### 3. Set Up Credentials
 ```bash
+# Set up your Poe API key
 python users/setup/setup_credentials.py
+
+# Optional: Set up web UI authentication (recommended for Tailscale)
+python users/setup/setup_webui.py
 ```
 
 ### 4. Test Basic Usage
@@ -52,7 +57,7 @@ python users/basic_usage.py
 
 For Slack integration, see the comprehensive guide:
 - **Setup Guide**: `users/setup/slack_setup.md`
-- **Install**: `pip install -e ".[slackbot]"`
+- **Install**: `pip install -e ".[all]"` (Slack bot requires web interface)
 - **Run**: `pypoe slack-bot`
 
 ## 📊 Database Storage
@@ -64,15 +69,15 @@ Conversation history is stored in `users/history/conversations.db`
 | Package | Command | Features |
 |---------|---------|----------|
 | **Core** | `pip install -e .` | CLI, API client, history |
-| **Slack Bot** | `pip install -e ".[slackbot]"` | + Slack integration |
-| **Web UI** | `pip install -e ".[web-ui]"` | + Web interface (coming soon) |
+| **Web UI** | `pip install -e ".[web-ui]"` | + Web interface |
 | **Development** | `pip install -e ".[dev]"` | + Testing tools |
-| **Everything** | `pip install -e ".[all]"` | All features |
+| **Everything** | `pip install -e ".[all]"` | All features (includes Slack bot) |
 
 ## 📚 Example Files
 
 - **`basic_usage.py`**: Simple API usage example
-- **`setup/setup_credentials.py`**: Interactive credential setup
+- **`setup/setup_credentials.py`**: Interactive Poe API key setup
+- **`setup/setup_webui.py`**: Interactive web UI authentication setup
 - **`pypoe.env.example`**: Environment template with all options
 
 ## 🔧 Configuration

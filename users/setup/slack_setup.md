@@ -89,12 +89,11 @@ ENABLE_HISTORY=true
 
 ### Step 5: Install PyPoe with Slack Integration
 
-```bash
-# Install PyPoe with Slack bot support
-pip install -e ".[slackbot]"
+First, install PyPoe with full functionality (Slack bot requires the web interface):
 
-# Or if you prefer installing from a released version:
-# pip install "pypoe[slackbot]"
+```bash
+# Install PyPoe with complete functionality (Slack + Web + CLI)
+pip install -e ".[all]"
 ```
 
 This will automatically install all required dependencies:
@@ -187,7 +186,7 @@ In your test workspace:
 **"Import errors"**
 ```bash
 # Install PyPoe with Slack integration
-pip install -e ".[slackbot]"
+pip install -e ".[slack]"
 
 # Or verify installation
 pip show pypoe slack-bolt slack-sdk

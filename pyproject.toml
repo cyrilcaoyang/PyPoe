@@ -30,21 +30,15 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# Development dependencies
-dev = [
-    "pytest>=7.0.0",
-    "pytest-asyncio>=0.21.0",
-]
+# Option 1: Minimal CLI Only (default installation)
+# pip install -e .
+# Includes: Command line interface only
+# Use for: Automation scripts and minimal deployments
 
-# Slack bot integration
-slackbot = [
-    "slack-bolt>=1.18.1",
-    "slack-sdk>=3.26.2",
-    "gunicorn>=21.2.0",
-    "uvicorn[standard]>=0.24.0",
-]
-
-# Web UI interface (future feature)
+# Option 2: CLI + Web Interface  
+# pip install -e ".[web-ui]"
+# Includes: Command line tools + web interface
+# Use for: Personal use with both terminal and browser access
 web-ui = [
     "fastapi>=0.104.0",
     "uvicorn[standard]>=0.24.0",
@@ -52,11 +46,28 @@ web-ui = [
     "python-multipart>=0.0.6",
 ]
 
-# All optional features
+# Option 3: Complete Installation (All Features)
+# pip install -e ".[all]"
+# Includes: CLI + Web + Slack bot integration  
+# Use for: Team deployments with all interface options
 all = [
-    "pypoe[slackbot]",
     "pypoe[web-ui]",
-    "pypoe[dev]",
+    "slack-bolt>=1.18.1",
+    "slack-sdk>=3.26.2",
+]
+
+# Option 4: Development Mode
+# pip install -e ".[dev]" 
+# Includes: Everything + testing tools + development dependencies
+# Use for: Contributing to PyPoe or custom development
+dev = [
+    "pypoe[all]",
+    "pytest>=7.0.0",
+    "pytest-asyncio>=0.21.0",
+    "black>=23.0.0",
+    "isort>=5.12.0",
+    "flake8>=6.0.0",
+    "mypy>=1.0.0",
 ]
 
 [project.scripts]

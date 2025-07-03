@@ -12,6 +12,7 @@ from datetime import datetime
 from typing import Optional
 
 from .poe.client import PoeChatClient
+from .config import get_config
 
 # Import history manager from core package
 try:
@@ -261,39 +262,29 @@ def status():
         click.echo("💡 Check history manager import")
 
 @main.command()
-@click.option('--host', default='localhost', help='Host to bind the server to')
-@click.option('--port', default=8000, help='Port to run the server on')
-def web(host, port):
-    """Run the PyPoe web interface"""
-    try:
-        from .web.app import run_server, WEB_AVAILABLE
-        
-        if not WEB_AVAILABLE:
-            click.echo("❌ Web UI not available.")
-            click.echo("💡 Install PyPoe with web UI support:")
-            click.echo("   pip install -e \".[web-ui]\"")
-            click.echo("   # or: pip install fastapi jinja2 uvicorn python-multipart")
-            return
-        
-        click.echo("🚀 Starting PyPoe Web Interface...")
-        click.echo(f"🌐 Server will be available at:")
-        click.echo(f"   • Local: http://localhost:{port}")
-        if host != 'localhost':
-            click.echo(f"   • Network: http://{host}:{port}")
-        click.echo()
-        click.echo("📝 Make sure you have POE_API_KEY set in your environment")
-        click.echo("Press Ctrl+C to stop the server")
-        click.echo("=" * 50)
-        
-        run_server(host=host, port=port)
-        
-    except ImportError as e:
-        click.echo(f"❌ Failed to import web interface: {e}")
-        click.echo("Install web dependencies with: pip install -e \".[web-ui]\"")
-    except KeyboardInterrupt:
-        click.echo("\n👋 Web server stopped.")
-    except Exception as e:
-        click.echo(f"❌ Error starting web server: {e}")
+@click.option('--host', default='localhost', envvar='PYPOE_HOST', help='Host to bind the server to. Can be set with PYPOE_HOST env var.')
+@click.option('--port', default=8000, envvar='PYPOE_PORT', type=int, help='Port to run the server on. Can be set with PYPOE_PORT env var.')
+@click.option('--web-username', envvar='PYPOE_WEB_USERNAME', help='Username for web UI basic auth. Can be set with PYPOE_WEB_USERNAME env var.')
+@click.option('--web-password', envvar='PYPOE_WEB_PASSWORD', help='Password for web UI basic auth. Can be set with PYPOE_WEB_PASSWORD env var.')
+def web(host, port, web_username, web_password):
+    """Start the PyPoe web interface"""
+    config = get_config()
+    if web_username:
+        config.web_username = web_username
+    if web_password:
+        config.web_password = web_password
+
+    if 'src.pypoe.web.runner' in sys.modules:
+        from src.pypoe.web.runner import run_web_server
+    else:
+        # Fallback for different execution environments
+        from .web.runner import run_web_server
+
+    if config.web_username:
+        click.echo(f"🔐 Web interface is password protected")
+    
+    click.echo(f"🌐 Starting web server at http://{host}:{port}")
+    run_web_server(host=host, port=port, config=config)
 
 @main.command()
 @click.option('--format', 'export_format', default='table', type=click.Choice(['table', 'json']), help='Output format')
@@ -364,7 +355,7 @@ def slack_bot(enable_history, socket_mode):
         if not SLACK_AVAILABLE:
             click.echo("❌ Slack integration not available.")
             click.echo("💡 Install PyPoe with Slack support:")
-            click.echo("   pip install -e \".[slackbot]\"")
+            click.echo("   pip install -e \".[slack]\"")
             click.echo("   # or: pip install slack-bolt slack-sdk")
             return
         
