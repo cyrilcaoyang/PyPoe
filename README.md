@@ -34,7 +34,7 @@ PyPoe offers additional features through optional extras:
 pip install -e ".[slackbot]"
 # Includes: slack-bolt, slack-sdk, gunicorn, uvicorn
 
-# Web UI Interface (coming soon)
+# Web UI Interface
 pip install -e ".[web-ui]"
 # Includes: fastapi, jinja2, uvicorn, python-multipart
 
@@ -115,21 +115,42 @@ ENABLE_HISTORY=true
 PyPoe/
 ├── src/
 │   └── pypoe/              # Main package source code
-│       ├── __init__.py
-│       ├── client.py       # Main client class
+│       ├── __init__.py     # Main package exports
 │       ├── config.py       # Configuration management
 │       ├── cli.py          # Command-line interface
-│       ├── history.py      # History utilities
-│       └── manager.py      # 📦 History manager (core component)
-├── user_scripts/           # User examples and utilities
+│       │
+│       ├── poe/            # 🤖 Core POE functionality
+│       │   ├── client.py   # Main POE API client
+│       │   ├── history.py  # Simple history manager
+│       │   └── manager.py  # Advanced history manager
+│       │
+│       ├── web/            # 🌐 Web interface module
+│       │   ├── app.py      # FastAPI web application
+│       │   ├── templates/  # HTML templates
+│       │   └── static/     # CSS, JavaScript assets
+│       │
+│       └── slack/          # 💬 Slack bot integration
+│           ├── bot.py      # Slack bot implementation
+│           └── runner.py   # Slack bot runner
+├── users/                  # User examples and utilities
 │   ├── basic_usage.py      # Basic usage example
-│   ├── setup_credentials.py  # Credential setup
+│   ├── web_sample.py       # Web interface example
+│   ├── setup/              # Setup scripts and guides
 │   └── history/            # 🗄️ Database storage directory
-│       └── conversations.db  # SQLite database (created at runtime)
+│       └── pypoe_history.db  # SQLite database (created at runtime)
 ├── tests/                  # Test suite
 ├── pyproject.toml          # Package configuration
 └── README.md
 ```
+
+### Modular Architecture
+
+PyPoe is organized into distinct modules for better maintainability:
+
+- **`pypoe.poe`**: Core POE API functionality (always available)
+- **`pypoe.web`**: Web interface with modern chat UI (optional)
+- **`pypoe.slack`**: Slack bot integration (optional)
+- **Shared Database**: All modules use the same SQLite database for conversation history
 
 ## API Reference
 
@@ -227,6 +248,16 @@ pypoe messages <conversation-id>
 pypoe delete <conversation-id>
 ```
 
+### Web Interface
+
+```bash
+# Start the web interface
+pypoe web
+
+# Run on custom host/port  
+pypoe web --host 0.0.0.0 --port 3000
+```
+
 ## Available Bots
 
 PyPoe supports all bots available through the Poe API:
@@ -322,6 +353,94 @@ pypoe slack-bot
 - `@poe_bot <message>` - Mention the bot in any channel
 
 See [users/setup/slack_setup.md](users/setup/slack_setup.md) for complete setup instructions.
+
+## Web Interface
+
+PyPoe includes a modern web interface for chatting with AI bots through your browser:
+
+### Features
+- 🌐 **Modern UI**: Clean, responsive chat interface with real-time streaming
+- 🤖 **Bot Selection**: Choose from any available Poe bot mid-conversation
+- 💬 **Conversation Management**: Create, view, and delete conversation history
+- 📱 **Responsive Design**: Works on desktop, tablet, and mobile devices
+- 🔄 **Real-time Chat**: WebSocket-based streaming responses
+- 💾 **Shared Database**: Uses the same SQLite database as CLI and Slack bot
+
+### Quick Start
+```bash
+# Install PyPoe with web UI support
+pip install -e ".[web-ui]"
+
+# Run the web interface
+pypoe web
+
+# Or run programmatically
+python users/web_sample.py
+```
+
+### Web Interface Features
+
+**Chat Interface:**
+- Real-time streaming responses with typing indicators
+- Message history with timestamps
+- Bot switching during conversations
+- Auto-expanding text input
+
+**Conversation Management:**
+- Sidebar with all conversations
+- Create new conversations with custom titles
+- Delete conversations with confirmation
+- Persistent history across sessions
+
+**Responsive Design:**
+- Mobile-friendly interface
+- Clean, modern styling
+- Smooth animations and transitions
+- Accessible design patterns
+
+### API Endpoints
+
+The web interface exposes RESTful endpoints:
+
+```python
+# Run the web app programmatically
+from pypoe.web.app import create_app, run_server
+
+# Create FastAPI app
+app = create_app()
+
+# Or run the server directly
+run_server(host="localhost", port=8000)
+```
+
+**Available Endpoints:**
+- `GET /` - Main chat interface
+- `GET /api/conversations` - List all conversations
+- `POST /api/conversation/new` - Create new conversation
+- `GET /api/conversation/{id}/messages` - Get conversation messages
+- `DELETE /api/conversation/{id}` - Delete conversation
+- `GET /api/bots` - List available bots
+- `WebSocket /ws/chat/{id}` - Real-time chat interface
+
+### Configuration
+
+The web interface uses the same configuration as the CLI:
+
+```bash
+# Required: Set your Poe API key
+export POE_API_KEY="your-api-key-here"
+
+# Optional: Custom database path
+export DATABASE_PATH="users/history/pypoe_history.db"
+
+# Run on custom host/port
+pypoe web --host 0.0.0.0 --port 3000
+```
+
+**Database Integration:**
+- Uses the same SQLite database as CLI and Slack bot
+- Conversations created in web UI appear in CLI history
+- Full compatibility across all PyPoe interfaces
 
 ## Terms of Service Compliance
 

@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PyPoe Chat Interface</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar for conversations -->
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <h2><i class="fas fa-robot"></i> PyPoe Chat</h2>
+                <button id="new-chat-btn" class="btn btn-primary">
+                    <i class="fas fa-plus"></i> New Chat
+                </button>
+            </div>
+            
+            <div class="conversations-list" id="conversations-list">
+                {% for conversation in conversations %}
+                <div class="conversation-item" data-id="{{ conversation.id }}">
+                    <div class="conversation-info">
+                        <h4>{{ conversation.title }}</h4>
+                        <p><i class="fas fa-robot"></i> {{ conversation.bot_name }}</p>
+                        <small>{{ conversation.created_at }}</small>
+                    </div>
+                    <button class="delete-btn" data-id="{{ conversation.id }}">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Main chat area -->
+        <div class="main-content">
+            <div class="chat-header">
+                <div class="chat-info">
+                    <h3 id="current-chat-title">Select or create a conversation</h3>
+                    <p id="current-bot-name">No bot selected</p>
+                </div>
+                <div class="bot-selector">
+                    <label for="bot-select">Bot:</label>
+                    <select id="bot-select">
+                        {% for bot in available_bots %}
+                        <option value="{{ bot }}">{{ bot }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+
+            <div class="messages-container" id="messages-container">
+                <div class="welcome-message">
+                    <i class="fas fa-robot fa-3x"></i>
+                    <h3>Welcome to PyPoe Chat!</h3>
+                    <p>Select a conversation from the sidebar or create a new one to start chatting with AI bots.</p>
+                </div>
+            </div>
+
+            <div class="input-area">
+                <div class="input-container">
+                    <textarea 
+                        id="message-input" 
+                        placeholder="Type your message here..." 
+                        rows="1"
+                        disabled
+                    ></textarea>
+                    <button id="send-btn" class="btn btn-primary" disabled>
+                        <i class="fas fa-paper-plane"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- New Chat Modal -->
+    <div id="new-chat-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>New Conversation</h3>
+                <span class="close">&times;</span>
+            </div>
+            <form id="new-chat-form">
+                <div class="form-group">
+                    <label for="chat-title">Title:</label>
+                    <input type="text" id="chat-title" name="title" required placeholder="Enter conversation title">
+                </div>
+                <div class="form-group">
+                    <label for="chat-bot">Bot:</label>
+                    <select id="chat-bot" name="bot_name" required>
+                        {% for bot in available_bots %}
+                        <option value="{{ bot }}">{{ bot }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" id="cancel-btn">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Create</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html> 

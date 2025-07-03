@@ -16,7 +16,7 @@ import asyncio
 import sys
 
 try:
-    from .slack_bot import main
+    from .bot import main
     
     if __name__ == "__main__":
         asyncio.run(main())

@@ -11,11 +11,11 @@ import sys
 from datetime import datetime
 from typing import Optional
 
-from .poe_client import PoeChatClient
+from .poe.client import PoeChatClient
 
 # Import history manager from core package
 try:
-    from .history_manager import HistoryManager
+    from .poe.manager import HistoryManager
     HISTORY_AVAILABLE = True
 except ImportError:
     HISTORY_AVAILABLE = False
@@ -261,6 +261,41 @@ def status():
         click.echo("💡 Check history manager import")
 
 @main.command()
+@click.option('--host', default='localhost', help='Host to bind the server to')
+@click.option('--port', default=8000, help='Port to run the server on')
+def web(host, port):
+    """Run the PyPoe web interface"""
+    try:
+        from .web.app import run_server, WEB_AVAILABLE
+        
+        if not WEB_AVAILABLE:
+            click.echo("❌ Web UI not available.")
+            click.echo("💡 Install PyPoe with web UI support:")
+            click.echo("   pip install -e \".[web-ui]\"")
+            click.echo("   # or: pip install fastapi jinja2 uvicorn python-multipart")
+            return
+        
+        click.echo("🚀 Starting PyPoe Web Interface...")
+        click.echo(f"🌐 Server will be available at:")
+        click.echo(f"   • Local: http://localhost:{port}")
+        if host != 'localhost':
+            click.echo(f"   • Network: http://{host}:{port}")
+        click.echo()
+        click.echo("📝 Make sure you have POE_API_KEY set in your environment")
+        click.echo("Press Ctrl+C to stop the server")
+        click.echo("=" * 50)
+        
+        run_server(host=host, port=port)
+        
+    except ImportError as e:
+        click.echo(f"❌ Failed to import web interface: {e}")
+        click.echo("Install web dependencies with: pip install -e \".[web-ui]\"")
+    except KeyboardInterrupt:
+        click.echo("\n👋 Web server stopped.")
+    except Exception as e:
+        click.echo(f"❌ Error starting web server: {e}")
+
+@main.command()
 @click.option('--enable-history/--no-history', default=True, help='Enable conversation history')
 @click.option('--socket-mode/--http-mode', default=True, help='Use Socket Mode (dev) vs HTTP mode (prod)')
 def slack_bot(enable_history, socket_mode):
@@ -269,7 +304,7 @@ def slack_bot(enable_history, socket_mode):
     import asyncio
     
     try:
-        from .slack_bot import PyPoeSlackBot, SLACK_AVAILABLE
+        from .slack.bot import PyPoeSlackBot, SLACK_AVAILABLE
         
         if not SLACK_AVAILABLE:
             click.echo("❌ Slack integration not available.")

@@ -4,13 +4,13 @@ from pathlib import Path
 from typing import AsyncGenerator, List, Dict, Any, Optional
 import fastapi_poe as fp
 
-from .config import get_config, Config
+from ..config import get_config, Config
 
-# Add user_scripts to path for history import
-sys.path.insert(0, str(Path(__file__).parent.parent / "user_scripts"))
+# Add users directory to path for any user scripts
+sys.path.insert(0, str(Path(__file__).parent.parent.parent / "users"))
 
 try:
-    from .poe_history import HistoryManager
+    from .history import HistoryManager
     HISTORY_AVAILABLE = True
 except ImportError:
     HISTORY_AVAILABLE = False
