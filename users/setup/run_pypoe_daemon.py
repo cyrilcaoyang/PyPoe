@@ -20,12 +20,88 @@ import subprocess
 import time
 from pathlib import Path
 from datetime import datetime
+from typing import Optional, Dict
 
 # Configuration
 DAEMON_NAME = "pypoe-web"
 PID_FILE = Path.home() / f".{DAEMON_NAME}.pid"
 LOG_FILE = Path.home() / f".{DAEMON_NAME}.log"
 ERROR_LOG_FILE = Path.home() / f".{DAEMON_NAME}.error.log"
+
+def get_tailscale_ip() -> Optional[str]:
+    """Get the current machine's Tailscale IP address"""
+    try:
+        result = subprocess.run(['tailscale', 'ip'], 
+                              capture_output=True, text=True, timeout=10)
+        if result.returncode == 0:
+            # Get the IPv4 address (first line, usually)
+            lines = result.stdout.strip().split('\n')
+            for line in lines:
+                line = line.strip()
+                if line and not ':' in line:  # IPv4 (no colons)
+                    return line
+            # If no IPv4 found, use first line
+            if lines:
+                return lines[0].strip()
+        return None
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        return None
+
+def get_network_interfaces() -> Dict[str, str]:
+    """Get all network interfaces and their IP addresses"""
+    interfaces = {}
+    
+    try:
+        # Get all network interfaces
+        result = subprocess.run(['ifconfig'], capture_output=True, text=True, timeout=10)
+        if result.returncode == 0:
+            current_interface = None
+            for line in result.stdout.split('\n'):
+                # Look for interface names (start of line, end with :)
+                if line and not line.startswith('\t') and not line.startswith(' ') and ':' in line:
+                    current_interface = line.split(':')[0].strip()
+                # Look for inet addresses
+                elif current_interface and 'inet ' in line and 'netmask' in line:
+                    parts = line.strip().split()
+                    for i, part in enumerate(parts):
+                        if part == 'inet' and i + 1 < len(parts):
+                            ip = parts[i + 1]
+                            # Skip certain interfaces
+                            if not ip.startswith('127.') and not ip.startswith('169.254.'):
+                                interfaces[current_interface] = ip
+                            break
+    except Exception:
+        pass
+    
+    return interfaces
+
+def get_access_urls() -> Dict[str, str]:
+    """Get all access URLs for the current machine"""
+    urls = {}
+    
+    # Always include localhost
+    urls['Local (localhost)'] = 'http://localhost:8000'
+    urls['Local (127.0.0.1)'] = 'http://127.0.0.1:8000'
+    
+    # Get Tailscale IP
+    tailscale_ip = get_tailscale_ip()
+    if tailscale_ip:
+        urls['Tailscale'] = f'http://{tailscale_ip}:8000'
+    
+    # Get other network interfaces
+    interfaces = get_network_interfaces()
+    for interface, ip in interfaces.items():
+        if ip != tailscale_ip:  # Don't duplicate Tailscale IP
+            urls[f'LAN ({interface})'] = f'http://{ip}:8000'
+    
+    return urls
+
+def print_access_urls():
+    """Print all access URLs"""
+    print("🌐 Access the web interface at:")
+    urls = get_access_urls()
+    for name, url in urls.items():
+        print(f"   • {name}: {url}")
 
 def print_header():
     """Print header"""
@@ -102,11 +178,7 @@ def start_daemon():
                 print(f"📁 Log file: {LOG_FILE}")
                 print(f"📁 Error log: {ERROR_LOG_FILE}")
                 print()
-                print("🌐 Access the web interface at:")
-                print("   • Local: http://localhost:8000")
-                print("   • Local: http://127.0.0.1:8000")
-                print("   • Tailscale: http://100.64.254.201:8000")
-                print("   • LAN: http://172.31.34.149:8000")
+                print_access_urls()
                 print()
                 print("💡 Use these commands:")
                 print("   python users/setup/run_pypoe_daemon.py status   # Check status")
@@ -190,11 +262,7 @@ def status_daemon():
         except Exception:
             pass
         
-        print("🌐 Web interface accessible at:")
-        print("   • Local: http://localhost:8000")
-        print("   • Local: http://127.0.0.1:8000")
-        print("   • Tailscale: http://100.64.254.201:8000")
-        print("   • LAN: http://172.31.34.149:8000")
+        print_access_urls()
         
     else:
         print("❌ PyPoe web server is not running")
