@@ -1,0 +1,264 @@
+#!/usr/bin/env python3
+"""
+PyPoe Daemon Runner
+
+This script helps you run PyPoe web server as a daemon that keeps running
+even after you log out from SSH sessions.
+
+Usage:
+    python users/setup/run_pypoe_daemon.py start    # Start the daemon
+    python users/setup/run_pypoe_daemon.py stop     # Stop the daemon
+    python users/setup/run_pypoe_daemon.py restart  # Restart the daemon
+    python users/setup/run_pypoe_daemon.py status   # Check daemon status
+    python users/setup/run_pypoe_daemon.py logs     # View daemon logs
+"""
+
+import os
+import sys
+import signal
+import subprocess
+import time
+from pathlib import Path
+from datetime import datetime
+
+# Configuration
+DAEMON_NAME = "pypoe-web"
+PID_FILE = Path.home() / f".{DAEMON_NAME}.pid"
+LOG_FILE = Path.home() / f".{DAEMON_NAME}.log"
+ERROR_LOG_FILE = Path.home() / f".{DAEMON_NAME}.error.log"
+
+def print_header():
+    """Print header"""
+    print("=" * 50)
+    print("🚀 PyPoe Web Server Daemon Manager")
+    print("=" * 50)
+
+def is_running():
+    """Check if daemon is running"""
+    if not PID_FILE.exists():
+        return False, None
+    
+    try:
+        with open(PID_FILE, 'r') as f:
+            pid = int(f.read().strip())
+        
+        # Check if process is still running
+        os.kill(pid, 0)
+        return True, pid
+    except (ValueError, ProcessLookupError, OSError):
+        # PID file exists but process is not running
+        PID_FILE.unlink(missing_ok=True)
+        return False, None
+
+def start_daemon():
+    """Start the PyPoe web server daemon"""
+    print_header()
+    
+    # Check if already running
+    running, pid = is_running()
+    if running:
+        print(f"✅ PyPoe web server is already running (PID: {pid})")
+        return
+    
+    print("🚀 Starting PyPoe web server daemon...")
+    
+    # Get current working directory
+    cwd = Path.cwd()
+    
+    # Create log files
+    LOG_FILE.touch()
+    ERROR_LOG_FILE.touch()
+    
+    # Start the process in background
+    try:
+        with open(LOG_FILE, 'a') as log_file, open(ERROR_LOG_FILE, 'a') as error_file:
+            # Write startup message
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            log_file.write(f"\n=== PyPoe Web Server Started: {timestamp} ===\n")
+            log_file.flush()
+            
+            # Start pypoe web in background
+            process = subprocess.Popen(
+                ['pypoe', 'web'],
+                cwd=cwd,
+                stdout=log_file,
+                stderr=error_file,
+                stdin=subprocess.DEVNULL,
+                preexec_fn=os.setsid  # Create new session
+            )
+            
+            # Save PID
+            with open(PID_FILE, 'w') as f:
+                f.write(str(process.pid))
+            
+            # Give it a moment to start
+            time.sleep(2)
+            
+            # Check if it's still running
+            if process.poll() is None:
+                print(f"✅ PyPoe web server started successfully!")
+                print(f"📁 PID: {process.pid}")
+                print(f"📁 PID file: {PID_FILE}")
+                print(f"📁 Log file: {LOG_FILE}")
+                print(f"📁 Error log: {ERROR_LOG_FILE}")
+                print()
+                print("🌐 Access the web interface at:")
+                print("   • Local: http://localhost:8000")
+                print("   • Local: http://127.0.0.1:8000")
+                print("   • Tailscale: http://100.64.254.201:8000")
+                print("   • LAN: http://172.31.34.149:8000")
+                print()
+                print("💡 Use these commands:")
+                print("   python users/setup/run_pypoe_daemon.py status   # Check status")
+                print("   python users/setup/run_pypoe_daemon.py logs     # View logs")
+                print("   python users/setup/run_pypoe_daemon.py stop     # Stop daemon")
+            else:
+                print("❌ Failed to start PyPoe web server")
+                print(f"📁 Check error log: {ERROR_LOG_FILE}")
+                PID_FILE.unlink(missing_ok=True)
+                
+    except Exception as e:
+        print(f"❌ Error starting daemon: {e}")
+        PID_FILE.unlink(missing_ok=True)
+
+def stop_daemon():
+    """Stop the PyPoe web server daemon"""
+    print_header()
+    
+    running, pid = is_running()
+    if not running:
+        print("⚠️  PyPoe web server is not running")
+        return
+    
+    print(f"🛑 Stopping PyPoe web server daemon (PID: {pid})...")
+    
+    try:
+        # Try graceful shutdown first
+        os.kill(pid, signal.SIGTERM)
+        
+        # Wait for process to stop
+        for _ in range(10):  # Wait up to 10 seconds
+            time.sleep(1)
+            try:
+                os.kill(pid, 0)
+            except ProcessLookupError:
+                break
+        else:
+            # Force kill if still running
+            print("🔨 Force killing process...")
+            os.kill(pid, signal.SIGKILL)
+        
+        # Clean up PID file
+        PID_FILE.unlink(missing_ok=True)
+        
+        # Log shutdown
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        with open(LOG_FILE, 'a') as log_file:
+            log_file.write(f"\n=== PyPoe Web Server Stopped: {timestamp} ===\n")
+        
+        print("✅ PyPoe web server stopped successfully")
+        
+    except ProcessLookupError:
+        print("⚠️  Process was already stopped")
+        PID_FILE.unlink(missing_ok=True)
+    except Exception as e:
+        print(f"❌ Error stopping daemon: {e}")
+
+def restart_daemon():
+    """Restart the PyPoe web server daemon"""
+    print_header()
+    print("🔄 Restarting PyPoe web server daemon...")
+    stop_daemon()
+    time.sleep(2)
+    start_daemon()
+
+def status_daemon():
+    """Check daemon status"""
+    print_header()
+    
+    running, pid = is_running()
+    if running:
+        print(f"✅ PyPoe web server is running (PID: {pid})")
+        
+        # Show process info
+        try:
+            result = subprocess.run(['ps', '-p', str(pid), '-o', 'pid,ppid,etime,cmd'], 
+                                  capture_output=True, text=True)
+            if result.returncode == 0:
+                print("\n📊 Process Information:")
+                print(result.stdout)
+        except Exception:
+            pass
+        
+        print("🌐 Web interface accessible at:")
+        print("   • Local: http://localhost:8000")
+        print("   • Local: http://127.0.0.1:8000")
+        print("   • Tailscale: http://100.64.254.201:8000")
+        print("   • LAN: http://172.31.34.149:8000")
+        
+    else:
+        print("❌ PyPoe web server is not running")
+    
+    print(f"\n📁 Files:")
+    print(f"   • PID file: {PID_FILE} {'✅' if PID_FILE.exists() else '❌'}")
+    print(f"   • Log file: {LOG_FILE} {'✅' if LOG_FILE.exists() else '❌'}")
+    print(f"   • Error log: {ERROR_LOG_FILE} {'✅' if ERROR_LOG_FILE.exists() else '❌'}")
+
+def show_logs():
+    """Show daemon logs"""
+    print_header()
+    
+    if not LOG_FILE.exists():
+        print("❌ No log file found")
+        return
+    
+    print(f"📋 Showing last 50 lines of {LOG_FILE}:")
+    print("-" * 50)
+    
+    try:
+        result = subprocess.run(['tail', '-n', '50', str(LOG_FILE)], 
+                              capture_output=True, text=True)
+        if result.returncode == 0:
+            print(result.stdout)
+        else:
+            print("❌ Failed to read log file")
+    except Exception as e:
+        print(f"❌ Error reading log file: {e}")
+    
+    print("-" * 50)
+    print(f"📁 Full log file: {LOG_FILE}")
+    print(f"📁 Error log file: {ERROR_LOG_FILE}")
+
+def main():
+    """Main function"""
+    if len(sys.argv) != 2:
+        print("Usage: python users/setup/run_pypoe_daemon.py {start|stop|restart|status|logs}")
+        sys.exit(1)
+    
+    command = sys.argv[1].lower()
+    
+    if command == 'start':
+        start_daemon()
+    elif command == 'stop':
+        stop_daemon()
+    elif command == 'restart':
+        restart_daemon()
+    elif command == 'status':
+        status_daemon()
+    elif command == 'logs':
+        show_logs()
+    else:
+        print(f"❌ Unknown command: {command}")
+        print("Available commands: start, stop, restart, status, logs")
+        sys.exit(1)
+
+if __name__ == "__main__":
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("\n👋 Cancelled by user")
+        sys.exit(1)
+    except Exception as e:
+        print(f"❌ Unexpected error: {e}")
+        sys.exit(1)
+ 

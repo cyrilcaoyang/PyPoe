@@ -106,3 +106,4 @@ SLACK_SOCKET_MODE=true
 3. **Explore CLI**: `pypoe --help`
 
 Happy chatting! 🤖✨ 
+ 

@@ -1,0 +1,31 @@
+[Unit]
+Description=PyPoe Web Server
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=pypoe
+Group=pypoe
+WorkingDirectory=/home/pypoe/PyPoe
+Environment=PATH=/home/pypoe/miniconda3/envs/pypoe-dev/bin:/usr/local/bin:/usr/bin:/bin
+EnvironmentFile=/home/pypoe/PyPoe/.env
+ExecStart=/home/pypoe/miniconda3/envs/pypoe-dev/bin/pypoe web
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=pypoe-web
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/home/pypoe/PyPoe
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+
+[Install]
+WantedBy=multi-user.target 

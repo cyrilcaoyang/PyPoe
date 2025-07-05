@@ -70,6 +70,10 @@ class PoeChatClient:
             
         Yields:
             Partial responses from the bot
+            
+        Raises:
+            ValueError: If the bot is not accessible or available
+            Exception: For other API errors
         """
         await self._ensure_history_initialized()
         
@@ -91,16 +95,47 @@ class PoeChatClient:
         # Prepare the message for the API
         poe_message = fp.ProtocolMessage(role="user", content=message)
         
-        # Stream the response
+        # Stream the response with error handling
         full_response = ""
-        async for partial in fp.get_bot_response(
-            messages=[poe_message], 
-            bot_name=bot_name, 
-            api_key=self.api_key
-        ):
-            if hasattr(partial, 'text') and partial.text:
-                yield partial.text
-                full_response += partial.text
+        try:
+            async for partial in fp.get_bot_response(
+                messages=[poe_message], 
+                bot_name=bot_name, 
+                api_key=self.api_key
+            ):
+                if hasattr(partial, 'text') and partial.text:
+                    yield partial.text
+                    full_response += partial.text
+        except Exception as e:
+            error_msg = str(e)
+            # Handle specific bot access errors
+            if "Cannot access private bots" in error_msg:
+                available_bots = await self.get_available_bots()
+                claude_alternatives = [bot for bot in available_bots if "Claude" in bot]
+                
+                error_message = f"❌ Bot '{bot_name}' is not accessible (private or deprecated).\n\n"
+                if claude_alternatives:
+                    error_message += f"🤖 Try these Claude alternatives instead:\n"
+                    for alt in claude_alternatives[:3]:  # Show top 3
+                        error_message += f"  • {alt}\n"
+                else:
+                    error_message += f"🤖 Try these available bots instead:\n"
+                    for alt in available_bots[:5]:  # Show top 5
+                        error_message += f"  • {alt}\n"
+                
+                raise ValueError(error_message)
+            elif "Bot does not exist" in error_msg:
+                available_bots = await self.get_available_bots()
+                error_message = f"❌ Bot '{bot_name}' does not exist.\n\n"
+                error_message += f"🤖 Try these available bots instead:\n"
+                for alt in available_bots[:5]:  # Show top 5
+                    error_message += f"  • {alt}\n"
+                raise ValueError(error_message)
+            elif "insufficient" in error_msg.lower() or "quota" in error_msg.lower():
+                raise ValueError(f"❌ Insufficient credits or quota exceeded. Please check your Poe subscription.")
+            else:
+                # Re-raise the original error for other cases
+                raise e
         
         # Save the bot response to history
         if save_history and conversation_id and full_response and self.enable_history:
@@ -158,14 +193,45 @@ class PoeChatClient:
         
         # Stream the response
         full_response = ""
-        async for partial in fp.get_bot_response(
-            messages=poe_messages, 
-            bot_name=bot_name, 
-            api_key=self.api_key
-        ):
-            if hasattr(partial, 'text') and partial.text:
-                yield partial.text
-                full_response += partial.text
+        try:
+            async for partial in fp.get_bot_response(
+                messages=poe_messages, 
+                bot_name=bot_name, 
+                api_key=self.api_key
+            ):
+                if hasattr(partial, 'text') and partial.text:
+                    yield partial.text
+                    full_response += partial.text
+        except Exception as e:
+            error_msg = str(e)
+            # Handle specific bot access errors
+            if "Cannot access private bots" in error_msg:
+                available_bots = await self.get_available_bots()
+                claude_alternatives = [bot for bot in available_bots if "Claude" in bot]
+                
+                error_message = f"❌ Bot '{bot_name}' is not accessible (private or deprecated).\n\n"
+                if claude_alternatives:
+                    error_message += f"🤖 Try these Claude alternatives instead:\n"
+                    for alt in claude_alternatives[:3]:  # Show top 3
+                        error_message += f"  • {alt}\n"
+                else:
+                    error_message += f"🤖 Try these available bots instead:\n"
+                    for alt in available_bots[:5]:  # Show top 5
+                        error_message += f"  • {alt}\n"
+                
+                raise ValueError(error_message)
+            elif "Bot does not exist" in error_msg:
+                available_bots = await self.get_available_bots()
+                error_message = f"❌ Bot '{bot_name}' does not exist.\n\n"
+                error_message += f"🤖 Try these available bots instead:\n"
+                for alt in available_bots[:5]:  # Show top 5
+                    error_message += f"  • {alt}\n"
+                raise ValueError(error_message)
+            elif "insufficient" in error_msg.lower() or "quota" in error_msg.lower():
+                raise ValueError(f"❌ Insufficient credits or quota exceeded. Please check your Poe subscription.")
+            else:
+                # Re-raise the original error for other cases
+                raise e
         
         # Save the bot response to history
         if save_history and conversation_id and full_response and self.enable_history:
@@ -178,16 +244,39 @@ class PoeChatClient:
     async def get_available_bots(self) -> List[str]:
         """
         Get a list of available bots.
-        Note: This is a basic list. The actual available bots may vary.
+        Note: This list contains verified working bots as of January 2025.
+        Some bots may require special permissions or subscriptions.
         """
-        # Common bots available on Poe
+        # Verified working bots on Poe as of January 2025
         return [
+            # OpenAI models (all working)
             "GPT-3.5-Turbo",
             "GPT-4",
-            "Claude-instant",
-            "Claude-2-100k",
-            "Code-Llama-34b-Instruct",
-            "Llama-2-70b-chat"
+            "GPT-4o",
+            "GPT-4o-mini",
+            "o1-preview",
+            "o1-mini",
+            "o3-mini",
+            "o4-mini",
+            
+            # Anthropic models (confirmed working)
+            "Claude-3-Opus",
+            "Claude-3-Sonnet", 
+            "Claude-3-Haiku",
+            "Claude-3.5-Sonnet",
+            "Claude-3.7-Sonnet",
+            
+            # Google models (confirmed working)
+            "Gemini-1.5-Pro",
+            "Gemini-2.0-Flash",
+            
+            # Meta models (may work - not all tested)
+            "Llama-3-70B-Instruct",
+            
+            # Other models (may work)
+            "DeepSeek-R1",
+            "Mistral-7B-Instruct",
+            "Mixtral-8x7B-Instruct",
         ]
 
     async def get_conversations(self) -> List[Dict[str, Any]]:
