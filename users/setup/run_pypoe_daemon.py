@@ -145,6 +145,9 @@ def start_daemon():
     LOG_FILE.touch()
     ERROR_LOG_FILE.touch()
     
+    # Get the port from environment or use default
+    port = os.environ.get('PYPOE_PORT', '8000')
+    
     # Start the process in background
     try:
         with open(LOG_FILE, 'a') as log_file, open(ERROR_LOG_FILE, 'a') as error_file:
@@ -153,9 +156,9 @@ def start_daemon():
             log_file.write(f"\n=== PyPoe Web Server Started: {timestamp} ===\n")
             log_file.flush()
             
-            # Start pypoe web in background
+            # Start pypoe web in background, explicitly setting host and port
             process = subprocess.Popen(
-                ['pypoe', 'web'],
+                ['pypoe', 'web', '--host', '0.0.0.0', '--port', port],
                 cwd=cwd,
                 stdout=log_file,
                 stderr=error_file,
