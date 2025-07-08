@@ -41,6 +41,7 @@ if not WEB_AVAILABLE:
 class ConversationCreate(BaseModel):
     title: str
     bot_name: str
+    chat_mode: Optional[str] = "chatbot"  # chatbot, group, debate
 
 class MessageSend(BaseModel):
     message: str
@@ -235,7 +236,24 @@ class WebApp:
                 if not conversation:
                     raise HTTPException(status_code=404, detail="Conversation not found")
                 
-                bot_name = message_data.bot_name or conversation.get('bot_name', 'GPT-3.5-Turbo')
+                # Get existing messages to check if conversation has started
+                existing_messages = await self.client.get_conversation_messages(conversation_id)
+                conversation_bot = conversation.get('bot_name', 'GPT-3.5-Turbo')
+                
+                # Bot locking: prevent changing bot mid-conversation
+                if existing_messages:
+                    # Conversation has messages - bot is locked to the original choice
+                    user_messages = [msg for msg in existing_messages if msg.get('role') == 'user']
+                    if user_messages and message_data.bot_name and message_data.bot_name != conversation_bot:
+                        raise HTTPException(
+                            status_code=400, 
+                            detail=f"Cannot change bot mid-conversation. This conversation is locked to {conversation_bot}. "
+                                   f"Current conversation has {len(user_messages)} user messages."
+                        )
+                    bot_name = conversation_bot
+                else:
+                    # New conversation - allow bot selection
+                    bot_name = message_data.bot_name or conversation_bot
                 
                 # Collect the full response
                 full_response = ""
@@ -371,7 +389,9 @@ class WebApp:
                         "search_conversations": True,
                         "authentication": bool(self.config.web_username),
                         "websocket_chat": True,
-                        "api_only_mode": False
+                        "api_only_mode": False,
+                        "bot_locking": True,
+                        "database_consistency": True
                     }
                 }
                 
@@ -392,9 +412,48 @@ class WebApp:
                     message_data = json.loads(data)
                     
                     user_message = message_data.get("message", "")
-                    bot_name = message_data.get("bot_name", "GPT-3.5-Turbo")
+                    requested_bot = message_data.get("bot_name", "GPT-3.5-Turbo")
                     
                     if not user_message:
+                        continue
+                    
+                    # Get conversation info and validate bot selection
+                    try:
+                        conversations = await self.client.get_conversations()
+                        conversation = next((c for c in conversations if c['id'] == conversation_id), None)
+                        
+                        if not conversation:
+                            await websocket.send_text(json.dumps({
+                                "type": "error",
+                                "content": "Conversation not found"
+                            }))
+                            continue
+                        
+                        # Get existing messages to check if conversation has started
+                        existing_messages = await self.client.get_conversation_messages(conversation_id)
+                        conversation_bot = conversation.get('bot_name', 'GPT-3.5-Turbo')
+                        
+                        # Bot locking: prevent changing bot mid-conversation
+                        if existing_messages:
+                            # Conversation has messages - bot is locked to the original choice
+                            user_messages = [msg for msg in existing_messages if msg.get('role') == 'user']
+                            if user_messages and requested_bot != conversation_bot:
+                                await websocket.send_text(json.dumps({
+                                    "type": "error",
+                                    "content": f"Cannot change bot mid-conversation. This conversation is locked to {conversation_bot}. "
+                                              f"Current conversation has {len(user_messages)} user messages."
+                                }))
+                                continue
+                            bot_name = conversation_bot
+                        else:
+                            # New conversation - allow bot selection
+                            bot_name = requested_bot
+                        
+                    except Exception as e:
+                        await websocket.send_text(json.dumps({
+                            "type": "error",
+                            "content": f"Error validating conversation: {str(e)}"
+                        }))
                         continue
                     
                     # Send user message back to confirm receipt
@@ -459,4 +518,33 @@ def run_server(host: str = "localhost", port: int = 8000, config: Config = None)
         return
     
     app = create_app(config)
-    uvicorn.run(app, host=host, port=port) 
+    
+    # Enhanced uvicorn configuration for production
+    uvicorn_config = {
+        "app": app,
+        "host": host,
+        "port": port,
+        "log_level": "info",
+        "access_log": True,
+        "server_header": False,  # Hide server header for security
+        "date_header": False,    # Hide date header for security
+    }
+    
+    # Add graceful shutdown handling
+    import signal
+    import asyncio
+    
+    def signal_handler(sig, frame):
+        print(f"\n👋 Received signal {sig}, shutting down gracefully...")
+    
+    # Register signal handlers for graceful shutdown
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+    
+    try:
+        uvicorn.run(**uvicorn_config)
+    except KeyboardInterrupt:
+        print("\n👋 Server shutdown complete")
+    except Exception as e:
+        print(f"❌ Server error: {e}")
+        raise 

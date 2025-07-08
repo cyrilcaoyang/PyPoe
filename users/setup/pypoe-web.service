@@ -1,7 +1,8 @@
 [Unit]
 Description=PyPoe Web Server
-After=network.target
-Wants=network.target
+After=network.target network-online.target
+Wants=network-online.target
+Requires=network.target
 
 [Service]
 Type=simple
@@ -9,10 +10,14 @@ User=pypoe
 Group=pypoe
 WorkingDirectory=/home/pypoe/PyPoe
 Environment=PATH=/home/pypoe/miniconda3/envs/pypoe-dev/bin:/usr/local/bin:/usr/bin:/bin
-EnvironmentFile=/home/pypoe/PyPoe/.env
-ExecStart=/home/pypoe/miniconda3/envs/pypoe-dev/bin/pypoe web
+Environment=PYTHONPATH=/home/pypoe/PyPoe/src
+EnvironmentFile=-/home/pypoe/PyPoe/.env
+ExecStart=/home/pypoe/miniconda3/envs/pypoe-dev/bin/pypoe web --host 0.0.0.0 --port 8000
+ExecReload=/bin/kill -HUP $MAINPID
 Restart=always
 RestartSec=10
+TimeoutStartSec=30
+TimeoutStopSec=15
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=pypoe-web
@@ -26,6 +31,19 @@ ReadWritePaths=/home/pypoe/PyPoe
 ProtectKernelTunables=true
 ProtectKernelModules=true
 ProtectControlGroups=true
+ProtectKernelLogs=true
+ProtectHostname=true
+ProtectClock=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+RemoveIPC=true
+PrivateDevices=true
+SystemCallFilter=@system-service
+SystemCallFilter=~@debug @mount @cpu-emulation @obsolete @privileged @reboot @swap
+LockPersonality=true
+MemoryDenyWriteExecute=true
+RestrictNamespaces=true
+SystemCallArchitectures=native
 
 [Install]
 WantedBy=multi-user.target 

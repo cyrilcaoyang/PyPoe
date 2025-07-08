@@ -58,13 +58,32 @@
 
         <!-- Right Panel: Selected chat messages -->
         <div class="main-content">
-            <div class="chat-header">
-                <div class="chat-info">
-                    <h3 id="current-chat-title">Select or create a conversation</h3>
-                    <p id="current-bot-name">No bot selected</p>
+            <!-- Global Header - Always visible -->
+            <div class="global-header">
+                <div class="header-left">
+                    <div class="logo-section">
+                        <i class="fas fa-robot"></i>
+                        <span class="app-title">PyPoe Chat</span>
+                    </div>
+                    <div class="mode-selector">
+                        <label for="global-chat-mode">Mode:</label>
+                        <select id="global-chat-mode">
+                            <option value="chatbot">Chat Bot - Single AI assistant</option>
+                            <option value="group">Group Chat - Multiple AI assistants</option>
+                            <option value="debate">AI Debate - Two AIs debate a topic</option>
+                        </select>
+                    </div>
                 </div>
-                <div class="chat-controls">
-                    <div class="chat-navigation">
+                <div class="header-right">
+                    <div class="bot-selector">
+                        <label for="global-bot-select">Bot:</label>
+                        <select id="global-bot-select">
+                            {% for bot in available_bots %}
+                            <option value="{{ bot }}">{{ bot }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="header-actions">
                         <button class="btn btn-secondary" onclick="app.scrollChatToTop()" title="Go to first message (Home key)">
                             <i class="fas fa-arrow-up"></i>
                         </button>
@@ -72,14 +91,14 @@
                             <i class="fas fa-arrow-down"></i>
                         </button>
                     </div>
-                    <div class="bot-selector">
-                        <label for="bot-select">Bot:</label>
-                        <select id="bot-select">
-                            {% for bot in available_bots %}
-                            <option value="{{ bot }}">{{ bot }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
+                </div>
+            </div>
+            
+            <!-- Chat Header - Shows active conversation info -->
+            <div class="chat-header">
+                <div class="chat-info">
+                    <h3 id="current-chat-title">Select or create a conversation</h3>
+                    <p id="current-bot-name">Choose a chat mode and bot above to get started</p>
                 </div>
             </div>
 
@@ -120,7 +139,15 @@
                     <input type="text" id="chat-title" name="title" required placeholder="Enter conversation title">
                 </div>
                 <div class="form-group">
-                    <label for="chat-bot">Bot:</label>
+                    <label for="chat-mode">Chat Mode:</label>
+                    <select id="chat-mode" name="chat_mode" required>
+                        <option value="chatbot">Chat Bot - Single AI assistant</option>
+                        <option value="group">Group Chat - Multiple AI assistants</option>
+                        <option value="debate">AI Debate - Two AIs debate a topic</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="chat-bot">AI Bot:</label>
                     <select id="chat-bot" name="bot_name" required>
                         {% for bot in available_bots %}
                         <option value="{{ bot }}">{{ bot }}</option>

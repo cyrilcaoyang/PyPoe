@@ -18,6 +18,7 @@ import sys
 import signal
 import subprocess
 import time
+import platform
 from pathlib import Path
 from datetime import datetime
 from typing import Optional, Dict
@@ -52,24 +53,42 @@ def get_network_interfaces() -> Dict[str, str]:
     interfaces = {}
     
     try:
-        # Get all network interfaces
-        result = subprocess.run(['ifconfig'], capture_output=True, text=True, timeout=10)
-        if result.returncode == 0:
-            current_interface = None
-            for line in result.stdout.split('\n'):
-                # Look for interface names (start of line, end with :)
-                if line and not line.startswith('\t') and not line.startswith(' ') and ':' in line:
-                    current_interface = line.split(':')[0].strip()
-                # Look for inet addresses
-                elif current_interface and 'inet ' in line and 'netmask' in line:
-                    parts = line.strip().split()
-                    for i, part in enumerate(parts):
-                        if part == 'inet' and i + 1 < len(parts):
-                            ip = parts[i + 1]
-                            # Skip certain interfaces
+        # Use different commands based on platform
+        if platform.system() == "Windows":
+            result = subprocess.run(['ipconfig'], capture_output=True, text=True, timeout=10)
+            # Parse Windows ipconfig output (simplified)
+            if result.returncode == 0:
+                lines = result.stdout.split('\n')
+                current_adapter = None
+                for line in lines:
+                    line = line.strip()
+                    if 'adapter' in line.lower() and ':' in line:
+                        current_adapter = line.split('adapter')[1].split(':')[0].strip()
+                    elif 'IPv4 Address' in line and current_adapter:
+                        parts = line.split(':')
+                        if len(parts) > 1:
+                            ip = parts[1].strip()
                             if not ip.startswith('127.') and not ip.startswith('169.254.'):
-                                interfaces[current_interface] = ip
-                            break
+                                interfaces[current_adapter] = ip
+        else:
+            # Unix-like systems
+            result = subprocess.run(['ifconfig'], capture_output=True, text=True, timeout=10)
+            if result.returncode == 0:
+                current_interface = None
+                for line in result.stdout.split('\n'):
+                    # Look for interface names (start of line, end with :)
+                    if line and not line.startswith('\t') and not line.startswith(' ') and ':' in line:
+                        current_interface = line.split(':')[0].strip()
+                    # Look for inet addresses
+                    elif current_interface and 'inet ' in line and 'netmask' in line:
+                        parts = line.strip().split()
+                        for i, part in enumerate(parts):
+                            if part == 'inet' and i + 1 < len(parts):
+                                ip = parts[i + 1]
+                                # Skip certain interfaces
+                                if not ip.startswith('127.') and not ip.startswith('169.254.'):
+                                    interfaces[current_interface] = ip
+                                break
     except Exception:
         pass
     
@@ -148,6 +167,13 @@ def start_daemon():
     # Get the port from environment or use default
     port = os.environ.get('PYPOE_PORT', '8000')
     
+    # Validate required environment variables
+    if not os.environ.get('POE_API_KEY'):
+        print("⚠️  Warning: POE_API_KEY not set in environment")
+        print("   The web server may not function properly without it")
+        print("   Get your API key from: https://poe.com/api_key")
+        print()
+    
     # Start the process in background
     try:
         with open(LOG_FILE, 'a') as log_file, open(ERROR_LOG_FILE, 'a') as error_file:
@@ -156,14 +182,22 @@ def start_daemon():
             log_file.write(f"\n=== PyPoe Web Server Started: {timestamp} ===\n")
             log_file.flush()
             
+            # Create process arguments
+            kwargs = {
+                'cwd': cwd,
+                'stdout': log_file,
+                'stderr': error_file,
+                'stdin': subprocess.DEVNULL,
+            }
+            
+            # Add process group creation for Unix systems
+            if platform.system() != "Windows":
+                kwargs['preexec_fn'] = os.setsid
+            
             # Start pypoe web in background, explicitly setting host and port
             process = subprocess.Popen(
                 ['pypoe', 'web', '--host', '0.0.0.0', '--port', port],
-                cwd=cwd,
-                stdout=log_file,
-                stderr=error_file,
-                stdin=subprocess.DEVNULL,
-                preexec_fn=os.setsid  # Create new session
+                **kwargs
             )
             
             # Save PID

@@ -18,8 +18,11 @@ class PyPoeApp {
         this.sendBtn = document.getElementById('send-btn');
         this.currentChatTitle = document.getElementById('current-chat-title');
         this.currentBotName = document.getElementById('current-bot-name');
-        this.botSelect = document.getElementById('bot-select');
         this.newChatBtn = document.getElementById('new-chat-btn');
+        
+        // Global header elements
+        this.globalChatMode = document.getElementById('global-chat-mode');
+        this.globalBotSelect = document.getElementById('global-bot-select');
         
         // Sidebar elements
         this.searchInput = document.getElementById('search-input');
@@ -45,6 +48,15 @@ class PyPoeApp {
         // Sidebar functionality
         this.searchInput.addEventListener('input', () => this.debounceSearch());
         this.botFilter.addEventListener('change', () => this.filterConversations());
+        
+        // Global header functionality
+        if (this.globalChatMode) {
+            this.globalChatMode.addEventListener('change', () => this.updateChatMode());
+        }
+        
+        if (this.globalBotSelect) {
+            this.globalBotSelect.addEventListener('change', () => this.updateSelectedBot());
+        }
         
         // Auto-resize textarea
         this.messageInput.addEventListener('input', () => this.autoResizeTextarea());
@@ -140,8 +152,10 @@ class PyPoeApp {
         const conv = this.conversations.find(c => c.id === conversationId);
         if (conv) {
             this.currentChatTitle.textContent = conv.title;
-            this.currentBotName.textContent = conv.bot_name;
-            this.botSelect.value = conv.bot_name;
+            this.currentBotName.textContent = `Bot: ${conv.bot_name}`;
+            if (this.globalBotSelect) {
+                this.globalBotSelect.value = conv.bot_name;
+            }
         }
         
         // Load messages
@@ -283,7 +297,7 @@ class PyPoeApp {
         if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
             this.websocket.send(JSON.stringify({
                 message: message,
-                bot_name: this.botSelect.value
+                bot_name: this.globalBotSelect ? this.globalBotSelect.value : 'GPT-3.5-Turbo'
             }));
         }
         
@@ -416,7 +430,40 @@ class PyPoeApp {
         }
     }
     
+    updateChatMode() {
+        // Update UI or behavior based on chat mode
+        const selectedMode = this.globalChatMode.value;
+        console.log('Chat mode changed to:', selectedMode);
+        
+        // Update current bot name display to reflect the selected mode
+        if (!this.currentConversationId) {
+            this.currentBotName.textContent = `Mode: ${this.globalChatMode.options[this.globalChatMode.selectedIndex].text}`;
+        }
+    }
+    
+    updateSelectedBot() {
+        // Update current bot name display
+        const selectedBot = this.globalBotSelect.value;
+        console.log('Bot changed to:', selectedBot);
+        
+        if (!this.currentConversationId) {
+            this.currentBotName.textContent = `Bot: ${selectedBot}`;
+        }
+    }
+    
     showNewChatModal() {
+        // Pre-fill modal with current global selections
+        const chatModeSelect = document.getElementById('chat-mode');
+        const chatBotSelect = document.getElementById('chat-bot');
+        
+        if (chatModeSelect && this.globalChatMode) {
+            chatModeSelect.value = this.globalChatMode.value;
+        }
+        
+        if (chatBotSelect && this.globalBotSelect) {
+            chatBotSelect.value = this.globalBotSelect.value;
+        }
+        
         this.newChatModal.style.display = 'block';
     }
     
@@ -478,10 +525,20 @@ document.addEventListener('DOMContentLoaded', () => {
             e.preventDefault();
             const formData = new FormData(e.target);
             
+            // Convert FormData to JSON for better handling
+            const data = {
+                title: formData.get('title'),
+                bot_name: formData.get('bot_name'),
+                chat_mode: formData.get('chat_mode') || 'chatbot'
+            };
+            
             try {
                 const response = await fetch('/api/conversation/new', {
                     method: 'POST',
-                    body: formData
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(data)
                 });
                 
                 const result = await response.json();

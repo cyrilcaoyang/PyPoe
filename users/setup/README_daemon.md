@@ -48,7 +48,57 @@ python users/setup/run_pypoe_daemon.py restart
 - ✅ Automatic logging
 - ✅ Process management
 - ✅ Error handling
-- ✅ Works on macOS, Linux, and Windows
+- ✅ Cross-platform support (Windows, macOS, Linux)
+- ✅ Environment variable validation
+- ✅ Network interface detection
+
+## 🔍 Health Monitoring
+
+### Basic Health Check
+```bash
+python users/setup/pypoe_health_check.py
+```
+
+### Full System Check
+```bash
+python users/setup/pypoe_health_check.py --full
+```
+
+### JSON Output (for monitoring systems)
+```bash
+python users/setup/pypoe_health_check.py --json --full
+```
+
+### Health Check Features:
+- ✅ Process status monitoring
+- ✅ Web server health verification  
+- ✅ API endpoint testing
+- ✅ Log file analysis
+- ✅ Environment validation
+- ✅ Performance metrics
+- ✅ JSON output for automation
+
+### Example Health Check Output:
+```
+✅ Overall Status: PASS
+📅 Check Time: 2025-01-27T10:30:00
+
+📋 Check Results:
+   ✅ Process: PyPoe process running (PID: 12345)
+   ✅ Web Server: Web server responding (status: healthy)
+   ✅ Logs: Log files OK
+   ✅ Api Endpoints: API endpoints responding
+   ✅ Environment: Environment OK
+```
+
+### Automated Monitoring with Cron:
+```bash
+# Check every 5 minutes, email on failure
+*/5 * * * * cd /path/to/PyPoe && python users/setup/pypoe_health_check.py --json > /dev/null || echo "PyPoe health check failed" | mail -s "PyPoe Alert" admin@example.com
+
+# Full check once per hour
+0 * * * * cd /path/to/PyPoe && python users/setup/pypoe_health_check.py --full --json >> /var/log/pypoe-health.log
+```
 
 ## 🔧 Method 2: Using nohup (Simple)
 
@@ -121,7 +171,18 @@ sudo systemctl restart pypoe-web
 
 # View logs
 sudo journalctl -u pypoe-web -f
+
+# Check health (using our health check script)
+python users/setup/pypoe_health_check.py --full
 ```
+
+### Enhanced systemd Features:
+- ✅ **Security hardening**: Comprehensive systemd security settings
+- ✅ **Automatic restarts**: Service restarts on failure
+- ✅ **Boot integration**: Starts automatically on system boot
+- ✅ **Process isolation**: Enhanced security and resource protection
+- ✅ **Graceful shutdown**: Proper SIGTERM/SIGKILL handling
+- ✅ **Timeout management**: Configurable start/stop timeouts
 
 ## 🖥️ Method 4: Using screen/tmux (SSH sessions)
 
