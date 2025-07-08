@@ -189,6 +189,144 @@ pypoe slack-bot --socket-mode
 pypoe slack-bot --http-mode
 ```
 
+## 🔄 Running Services in Background
+
+PyPoe services can run in the background, allowing you to access them even after logging out from SSH sessions or closing terminals.
+
+### 🌐 Web Interface Background Service
+
+#### Method 1: Python Daemon Script (Recommended)
+The easiest way to run PyPoe web server as a persistent daemon:
+
+```bash
+# Start the daemon
+python users/setup/run_pypoe_daemon.py start
+
+# Check status
+python users/setup/run_pypoe_daemon.py status
+
+# View real-time logs
+python users/setup/run_pypoe_daemon.py logs
+
+# Stop the daemon
+python users/setup/run_pypoe_daemon.py stop
+
+# Restart the daemon
+python users/setup/run_pypoe_daemon.py restart
+```
+
+**Features:**
+- ✅ Survives SSH logout and terminal closure
+- ✅ Automatic logging to `~/.pypoe-web.log`
+- ✅ Process management and error handling
+- ✅ Tailscale IP detection and display
+- ✅ Works on macOS, Linux, and Windows
+
+#### Method 2: Using nohup (Simple)
+For quick background execution:
+
+```bash
+# Start with nohup
+nohup pypoe web --host 0.0.0.0 --port 8000 > ~/pypoe-web.log 2>&1 &
+
+# Check if running
+ps aux | grep pypoe
+
+# Stop the process
+pkill -f "pypoe web"
+
+# View logs
+tail -f ~/pypoe-web.log
+```
+
+#### Method 3: Using systemd (Linux Production)
+For production Linux servers:
+
+```bash
+# Copy service file (adjust paths as needed)
+sudo cp users/setup/pypoe-web.service /etc/systemd/system/
+
+# Edit paths in service file
+sudo nano /etc/systemd/system/pypoe-web.service
+
+# Enable and start service
+sudo systemctl daemon-reload
+sudo systemctl enable pypoe-web
+sudo systemctl start pypoe-web
+
+# Check status
+sudo systemctl status pypoe-web
+
+# View logs
+sudo journalctl -u pypoe-web -f
+```
+
+### 🤖 Slack Bot Background Service
+
+Run the Slack bot as a background service:
+
+```bash
+# Method 1: Using nohup
+nohup pypoe slack-bot --enable-history > ~/pypoe-slack.log 2>&1 &
+
+# Method 2: Using the daemon script pattern
+# (Create similar script based on users/setup/run_pypoe_daemon.py)
+
+# Check if running
+ps aux | grep "pypoe slack-bot"
+
+# Stop the process
+pkill -f "pypoe slack-bot"
+```
+
+### 🌍 Network Access Options
+
+When running in background, you can configure network access:
+
+#### Local Access Only (Default)
+```bash
+pypoe web  # Accessible at http://localhost:8000
+```
+
+#### Tailscale Network Access
+```bash
+# Set Tailscale IP in environment
+export PYPOE_HOST="100.XX.XX.XX"  # Your Tailscale IP
+pypoe web --host $PYPOE_HOST --web-username admin --web-password secret
+```
+
+#### LAN Access (Be Careful!)
+```bash
+# Accessible from local network
+pypoe web --host 0.0.0.0 --web-username admin --web-password secret
+```
+
+### 📊 Service Management Commands
+
+```bash
+# Check what PyPoe processes are running
+ps aux | grep pypoe
+
+# Kill all PyPoe processes
+pkill -f pypoe
+
+# View logs for different services
+tail -f ~/.pypoe-web.log          # Web daemon logs
+tail -f ~/pypoe-web.log            # nohup web logs  
+tail -f ~/pypoe-slack.log          # Slack bot logs
+
+# Monitor system resources
+top -p $(pgrep -f pypoe)
+```
+
+### 🔐 Security Considerations for Background Services
+
+- **Always use authentication** when binding to `0.0.0.0` or external IPs
+- **Use strong passwords** for web interface protection
+- **Prefer Tailscale** over public IP exposure
+- **Monitor logs** regularly for security issues
+- **Keep API keys secure** in environment files
+
 ## 🌐 Web Interface Features
 
 - **Two-Panel Layout**: Conversation list + active chat
