@@ -8,6 +8,8 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 import uvicorn
 
 from ..config import get_config, Config
@@ -35,6 +37,15 @@ if not WEB_AVAILABLE:
         "Web UI dependencies not installed. Please install with: pip install -e '.[web-ui]'"
     )
 
+# Pydantic models for request bodies
+class ConversationCreate(BaseModel):
+    title: str
+    bot_name: str
+
+class MessageSend(BaseModel):
+    message: str
+    bot_name: Optional[str] = None
+
 class WebApp:
     """FastAPI web application for PyPoe chat interface."""
     
@@ -44,6 +55,21 @@ class WebApp:
         
         self.config = config
         self.app = FastAPI(title="PyPoe Web Interface", version="2.0.0")
+        
+        # Add CORS middleware for React frontend
+        self.app.add_middleware(
+            CORSMiddleware,
+            allow_origins=[
+                "http://localhost:5173",  # Vite dev server
+                "http://localhost:3000",  # Alternative React dev server
+                "http://127.0.0.1:5173",
+                "http://127.0.0.1:3000",
+            ],
+            allow_credentials=True,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
+        
         self.client = PoeChatClient(config=config)
         
         # Setup templates and static files
@@ -155,15 +181,12 @@ class WebApp:
                 return HTMLResponse(f"Error loading conversation: {str(e)}", status_code=500)
         
         @self.app.post("/api/conversation/new", dependencies=dependencies)
-        async def create_conversation(
-            title: str = Form(...),
-            bot_name: str = Form(...)
-        ):
+        async def create_conversation(conversation_data: ConversationCreate):
             """Create a new conversation."""
             try:
                 conversation_id = await self.client.history.create_conversation(
-                    title=title,
-                    bot_name=bot_name
+                    title=conversation_data.title,
+                    bot_name=conversation_data.bot_name
                 )
                 return JSONResponse({"conversation_id": conversation_id})
             except Exception as e:
@@ -196,6 +219,48 @@ class WebApp:
             except Exception as e:
                 raise HTTPException(status_code=500, detail=str(e))
         
+        @self.app.get("/api/health")
+        async def health_check():
+            """Health check endpoint for React frontend."""
+            try:
+                # Check if client is working
+                await self.client.get_available_bots()
+                return JSONResponse({"status": "healthy", "version": "2.0.0"})
+            except Exception as e:
+                return JSONResponse({"status": "unhealthy", "error": str(e)}, status_code=503)
+
+        @self.app.post("/api/conversation/{conversation_id}/send", dependencies=dependencies)
+        async def send_message(conversation_id: str, message_data: MessageSend):
+            """Send a message to a conversation (non-streaming)."""
+            try:
+                # Get the conversation to determine the bot
+                conversations = await self.client.get_conversations()
+                conversation = next((c for c in conversations if c['id'] == conversation_id), None)
+                
+                if not conversation:
+                    raise HTTPException(status_code=404, detail="Conversation not found")
+                
+                bot_name = message_data.bot_name or conversation.get('bot_name', 'GPT-3.5-Turbo')
+                
+                # Collect the full response
+                full_response = ""
+                async for partial_response in self.client.send_message(
+                    message=message_data.message,
+                    bot_name=bot_name,
+                    conversation_id=conversation_id,
+                    save_history=True
+                ):
+                    full_response += partial_response
+                
+                return JSONResponse({
+                    "message": full_response,
+                    "role": "assistant",
+                    "bot_name": bot_name,
+                    "conversation_id": conversation_id
+                })
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=str(e))
+
         @self.app.get("/api/bots", dependencies=dependencies)
         async def get_available_bots():
             """Get list of available bots."""
