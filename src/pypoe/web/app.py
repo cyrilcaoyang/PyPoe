@@ -337,6 +337,47 @@ class WebApp:
                 })
             except Exception as e:
                 raise HTTPException(status_code=500, detail=str(e))
+
+        @self.app.get("/api/config", dependencies=dependencies)
+        async def get_config_info():
+            """Get backend configuration information."""
+            try:
+                available_bots = await self.client.get_available_bots()
+                
+                config_info = {
+                    "backend_version": "2.0.0",
+                    "database_path": str(self.config.database_path),
+                    "authentication_enabled": bool(self.config.web_username),
+                    "username": self.config.web_username if self.config.web_username else None,
+                    "available_bots": available_bots,
+                    "total_bots": len(available_bots),
+                    "api_endpoints": [
+                        "/api/health",
+                        "/api/conversations", 
+                        "/api/bots",
+                        "/api/stats",
+                        "/api/config",
+                        "/api/conversation/new",
+                        "/api/conversation/{id}/messages",
+                        "/api/conversation/{id}/send",
+                        "/ws/chat/{id}"
+                    ],
+                    "cors_enabled": True,
+                    "websocket_enabled": True,
+                    "features": {
+                        "real_time_streaming": True,
+                        "conversation_history": True,
+                        "multi_bot_support": True,
+                        "search_conversations": True,
+                        "authentication": bool(self.config.web_username),
+                        "websocket_chat": True,
+                        "api_only_mode": False
+                    }
+                }
+                
+                return JSONResponse(config_info)
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=str(e))
         
         @self.app.websocket("/ws/chat/{conversation_id}")
         async def websocket_chat(websocket: WebSocket, conversation_id: str):
