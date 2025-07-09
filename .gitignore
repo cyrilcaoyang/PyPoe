@@ -77,6 +77,8 @@ users/history/*.db
 users/history/*.db-*
 pypoe_history.db
 test_pypoe_history.db
+single_webchat_history.db
+test_single_webchat_history.db
 
 # Temporary files
 *.tmp

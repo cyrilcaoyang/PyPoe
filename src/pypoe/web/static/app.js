@@ -45,6 +45,12 @@ class PyPoeApp {
         });
         this.newChatBtn.addEventListener('click', () => this.showNewChatModal());
         
+        // Welcome page new chat button
+        const welcomeNewChatBtn = document.getElementById('welcome-new-chat-btn');
+        if (welcomeNewChatBtn) {
+            welcomeNewChatBtn.addEventListener('click', () => this.showNewChatModal());
+        }
+        
         // Sidebar functionality
         this.searchInput.addEventListener('input', () => this.debounceSearch());
         this.botFilter.addEventListener('change', () => this.filterConversations());
@@ -86,6 +92,11 @@ class PyPoeApp {
             // Load stats for sidebar
             await this.loadStats();
             this.populateBotFilter();
+            
+            // Unlock bot selector when no active conversation
+            if (!this.currentConversationId) {
+                this.lockBotSelector(false);
+            }
         } catch (error) {
             console.error('Error loading initial data:', error);
         }
@@ -157,6 +168,9 @@ class PyPoeApp {
                 this.globalBotSelect.value = conv.bot_name;
             }
         }
+        
+        // Lock bot selector when conversation is active
+        this.lockBotSelector(true);
         
         // Load messages
         await this.loadConversationMessages(conversationId);
@@ -304,6 +318,30 @@ class PyPoeApp {
         this.autoResizeTextarea();
     }
 
+    lockBotSelector(lock = true) {
+        if (this.globalBotSelect) {
+            this.globalBotSelect.disabled = lock;
+            
+            // Update label to show lock status
+            const botLabel = document.querySelector('.bot-selector label');
+            
+            // Add visual styling
+            if (lock) {
+                this.globalBotSelect.classList.add('locked');
+                this.globalBotSelect.title = 'Bot is locked for this conversation. Create a new chat to select a different bot.';
+                if (botLabel) {
+                    botLabel.innerHTML = 'Bot: <i class="fas fa-lock" style="color: #e74c3c; margin-left: 4px;" title="Locked for this conversation"></i>';
+                }
+            } else {
+                this.globalBotSelect.classList.remove('locked');
+                this.globalBotSelect.title = 'Select AI bot';
+                if (botLabel) {
+                    botLabel.textContent = 'Bot:';
+                }
+            }
+        }
+    }
+
     populateBotFilter() {
         if (!this.botFilter) return;
         
@@ -417,12 +455,24 @@ class PyPoeApp {
                             <i class="fas fa-robot fa-3x"></i>
                             <h3>Welcome to PyPoe Chat!</h3>
                             <p>Select a conversation from the sidebar or create a new one to start chatting with AI bots.</p>
+                            <button id="welcome-new-chat-btn" class="btn btn-primary" style="margin-top: 20px;">
+                                <i class="fas fa-plus"></i> Start New Chat
+                            </button>
                         </div>
                     `;
                     this.currentChatTitle.textContent = 'Select or create a conversation';
-                    this.currentBotName.textContent = 'No bot selected';
+                    this.currentBotName.textContent = 'Choose a chat mode and bot above to get started';
                     this.messageInput.disabled = true;
                     this.sendBtn.disabled = true;
+                    
+                    // Unlock bot selector when no conversation is active
+                    this.lockBotSelector(false);
+                    
+                    // Re-bind welcome button event
+                    const welcomeNewChatBtn = document.getElementById('welcome-new-chat-btn');
+                    if (welcomeNewChatBtn) {
+                        welcomeNewChatBtn.addEventListener('click', () => this.showNewChatModal());
+                    }
                 }
             }
         } catch (error) {

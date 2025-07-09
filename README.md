@@ -288,17 +288,40 @@ When running in background, you can configure network access:
 pypoe web  # Accessible at http://localhost:8000
 ```
 
-#### Tailscale Network Access
+#### **All Interfaces Binding (Recommended for Network Access)**
+```bash
+# 1. Activate the pypoe-dev conda environment
+conda activate pypoe-dev
+
+# 2. Start backend binding to all interfaces (0.0.0.0) with authentication
+pypoe web --host 0.0.0.0 --port 8000 --web-username YOUR_USERNAME --web-password YOUR_PASSWORD
+
+# This makes the backend accessible from:
+# - Localhost: http://localhost:8000
+# - Tailscale: http://100.64.x.x:8000
+# - Local Network: http://192.168.x.x:8000 or http://172.x.x.x:8000
+```
+
+> **⚠️ Security Note**: Replace `YOUR_USERNAME` and `YOUR_PASSWORD` with your actual credentials. Use strong passwords for network access.
+
+#### Environment Configuration (Alternative)
+```bash
+# Set in .env file for automatic configuration
+echo "PYPOE_HOST=0.0.0.0
+PYPOE_PORT=8000
+PYPOE_WEB_USERNAME=YOUR_USERNAME
+PYPOE_WEB_PASSWORD=YOUR_PASSWORD" > .env
+
+# Then simply run:
+conda activate pypoe-dev
+pypoe web
+```
+
+#### Tailscale Network Access (Legacy Method)
 ```bash
 # Set Tailscale IP in environment
 export PYPOE_HOST="100.XX.XX.XX"  # Your Tailscale IP
 pypoe web --host $PYPOE_HOST --web-username admin --web-password secret
-```
-
-#### LAN Access (Be Careful!)
-```bash
-# Accessible from local network
-pypoe web --host 0.0.0.0 --web-username admin --web-password secret
 ```
 
 ### 📊 Service Management Commands

@@ -55,6 +55,11 @@ body {
     min-width: 0;
     font-size: 0.85rem;
     padding: 8px 12px;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
 }
 
 /* Search Controls in Sidebar */
@@ -277,12 +282,22 @@ body {
     background: white;
     color: #2c3e50;
     min-width: 200px;
+    transition: all 0.3s ease;
 }
 
 .mode-selector select:focus {
     outline: none;
     border-color: #3498db;
     box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
+}
+
+.mode-selector select:disabled,
+.mode-selector select.locked {
+    background: #f8f9fa;
+    color: #6c757d;
+    border-color: #dee2e6;
+    cursor: not-allowed;
+    opacity: 0.7;
 }
 
 .header-right {
@@ -299,6 +314,10 @@ body {
 .header-actions .btn {
     padding: 6px 10px;
     font-size: 0.8rem;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .chat-header {
@@ -338,6 +357,20 @@ body {
     border-radius: 6px;
     background: white;
     font-size: 0.9rem;
+    transition: all 0.3s ease;
+}
+
+.bot-selector select:disabled,
+.bot-selector select.locked {
+    background: #f8f9fa;
+    color: #6c757d;
+    border-color: #dee2e6;
+    cursor: not-allowed;
+    opacity: 0.7;
+}
+
+.bot-selector select.locked::after {
+    content: " 🔒";
 }
 
 .chat-controls {
@@ -406,6 +439,28 @@ body {
 .welcome-message h3 {
     margin-bottom: 15px;
     color: #2c3e50;
+}
+
+.welcome-message p {
+    font-size: 1.1rem;
+    line-height: 1.6;
+    margin-bottom: 10px;
+}
+
+.welcome-message .btn {
+    font-size: 1rem;
+    padding: 12px 24px;
+    border-radius: 8px;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.3s ease;
+    text-decoration: none;
+}
+
+.welcome-message .btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 15px rgba(52, 152, 219, 0.3);
 }
 
 .message {
