@@ -157,8 +157,12 @@ def start_daemon():
     
     print("🚀 Starting PyPoe web server daemon...")
     
-    # Get current working directory
-    cwd = Path.cwd()
+    # Set working directory to PyPoe project root
+    # This script is in users/setup/, so go up two levels to get to project root
+    pypoe_root = Path(__file__).parent.parent.parent
+    cwd = pypoe_root.resolve()
+    
+    print(f"📁 Working directory: {cwd}")
     
     # Create log files
     LOG_FILE.touch()
@@ -172,6 +176,7 @@ def start_daemon():
         print("⚠️  Warning: POE_API_KEY not set in environment")
         print("   The web server may not function properly without it")
         print("   Get your API key from: https://poe.com/api_key")
+        print(f"   Place it in a .env file in: {cwd}")
         print()
     
     # Start the process in background

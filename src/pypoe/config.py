@@ -12,7 +12,8 @@ class Config:
     web_password: str = ""
 
     def __post_init__(self):
-        load_dotenv()
+        # Try to load .env from multiple locations
+        self._load_env_files()
         
         # Set default database path to user-specific directory (~/.pypoe/)
         default_db_path = os.path.expanduser("~/.pypoe/single_webchat_history.db")
@@ -31,6 +32,28 @@ class Config:
                 "POE_API_KEY is not set. Please get your API key from https://poe.com/api_key "
                 "and set it in your .env file or environment variables."
             )
+
+    def _load_env_files(self):
+        """Load .env files from multiple possible locations."""
+        possible_env_paths = [
+            # 1. In the PyPoe project root (where users typically put the .env file)
+            Path(__file__).parent.parent.parent / ".env",  # src/pypoe/config.py -> PyPoe/.env
+            # 2. In the user's PyPoe directory
+            Path.home() / ".pypoe" / ".env",
+            # 3. Current working directory (original behavior)
+            Path.cwd() / ".env",
+            # 4. pypoe.env in users directory (example file location)
+            Path(__file__).parent.parent.parent / "users" / "pypoe.env",
+        ]
+        
+        for env_path in possible_env_paths:
+            if env_path.exists():
+                print(f"Loading environment from: {env_path}")
+                load_dotenv(env_path)
+                break
+        else:
+            # No .env file found, try loading from environment anyway
+            load_dotenv()
 
 def get_config() -> Config:
     """Get the application configuration."""
