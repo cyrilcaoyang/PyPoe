@@ -109,11 +109,16 @@ class PoeChatClient:
             from pathlib import Path
             media_dir = Path(self.config.database_path).parent / "media"
             
-            # Initialize with media directory for enhanced features
-            self.history = HistoryManager(
-                db_path=str(self.config.database_path),
-                media_dir=str(media_dir)
-            )
+            # Check if we're using EnhancedHistoryManager or basic HistoryManager
+            if hasattr(HistoryManager, '__module__') and 'enhanced_history' in HistoryManager.__module__:
+                # Using EnhancedHistoryManager - pass media_dir
+                self.history = HistoryManager(
+                    db_path=str(self.config.database_path),
+                    media_dir=str(media_dir)
+                )
+            else:
+                # Using basic HistoryManager - only pass db_path
+                self.history = HistoryManager(db_path=str(self.config.database_path))
             self._history_initialized = False
         else:
             self.history = None
