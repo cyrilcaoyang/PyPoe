@@ -14,6 +14,7 @@ import uvicorn
 
 from ..config import get_config, Config
 from ..poe.client import PoeChatClient
+from ..logging_db import logger
 
 # TODO: Add support for remote access of the webpage with username and password protection
 # This would involve:
@@ -89,6 +90,23 @@ class WebApp:
         self.active_connections: List[WebSocket] = []
         
         self._setup_routes()
+        
+        # Log system startup
+        logger.log_system_event(
+            event_type="startup",
+            component="backend",
+            action="start",
+            new_value={
+                "version": "2.0.0",
+                "authentication_enabled": bool(self.config.web_username),
+                "cors_enabled": True,
+                "websocket_enabled": True
+            },
+            metadata={
+                "config_file": str(self.config.config_file) if hasattr(self.config, 'config_file') else None,
+                "database_path": str(self.config.database_path)
+            }
+        )
     
     def _check_credentials(self, credentials: HTTPBasicCredentials = Depends(HTTPBasic())):
         if not self.config.web_username:
@@ -522,56 +540,268 @@ class WebApp:
             except Exception as e:
                 raise HTTPException(status_code=500, detail=str(e))
 
+        @self.app.get("/api/network-status", dependencies=dependencies)
+        async def get_network_status():
+            """Get current network interface status (dynamic detection)."""
+            try:
+                import subprocess
+                import platform
+                from datetime import datetime
+                
+                network_interfaces = {}
+                detected_ips = set()
+                
+                # Use the same comprehensive detection logic
+                system = platform.system().lower()
+                
+                if system == "darwin":  # macOS
+                    try:
+                        result = subprocess.run(['ifconfig'], capture_output=True, text=True, timeout=5)
+                        if result.returncode == 0:
+                            lines = result.stdout.split('\n')
+                            for line in lines:
+                                if 'inet ' in line and 'inet 127.' not in line and 'inet 169.254.' not in line:
+                                    parts = line.split()
+                                    if len(parts) >= 2:
+                                        ip = parts[1]
+                                        if '.' in ip and not ip.startswith('127.') and not ip.startswith('169.254.'):
+                                            detected_ips.add(ip)
+                    except (subprocess.TimeoutExpired, subprocess.SubprocessError, FileNotFoundError):
+                        pass
+                
+                elif system == "linux":
+                    try:
+                        result = subprocess.run(['ip', 'addr', 'show'], capture_output=True, text=True, timeout=5)
+                        if result.returncode == 0:
+                            lines = result.stdout.split('\n')
+                            for line in lines:
+                                if 'inet ' in line and '/127.' not in line and '/169.254.' not in line:
+                                    parts = line.strip().split()
+                                    for part in parts:
+                                        if '.' in part and '/' in part:
+                                            ip = part.split('/')[0]
+                                            if not ip.startswith('127.') and not ip.startswith('169.254.'):
+                                                detected_ips.add(ip)
+                    except (subprocess.TimeoutExpired, subprocess.SubprocessError, FileNotFoundError):
+                        pass
+                
+                # Fallback detection methods
+                test_connections = [('8.8.8.8', 80), ('1.1.1.1', 80)]
+                for host, port in test_connections:
+                    try:
+                        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+                            s.connect((host, port))
+                            local_ip = s.getsockname()[0]
+                            if not local_ip.startswith('127.') and not local_ip.startswith('169.254.'):
+                                detected_ips.add(local_ip)
+                    except:
+                        continue
+                
+                print(f"[Network Status] Found IPs: {sorted(detected_ips)}")
+                
+                # Categorize and test detected IPs
+                for ip in detected_ips:
+                    category = None
+                    if ip.startswith('100.64.'):
+                        category = 'tailscale'
+                    elif ip.startswith('172.29.'):
+                        category = 'compsci_vpn'
+                    elif ip.startswith('172.31.'):
+                        category = 'compsci_wifi'
+                    elif ip.startswith('192.168.') or ip.startswith('10.'):
+                        category = 'local'
+                    
+                    if category:
+                        # Test connectivity instead of binding (more reliable)
+                        is_reachable = False
+                        try:
+                            # Try to connect to ourselves on this interface (if backend is running)
+                            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as test_sock:
+                                test_sock.settimeout(1)  # Quick timeout
+                                result = test_sock.connect_ex((ip, 8000))
+                                is_reachable = (result == 0)  # 0 means connection successful
+                        except:
+                            # If connection test fails, assume interface is reachable
+                            # (backend might not be bound to this interface yet)
+                            is_reachable = True
+                        
+                        # Always add detected interfaces (if we can detect them, they're likely usable)
+                        status = 'active' if is_reachable else 'detected'
+                        network_interfaces[category] = {
+                            'ip': ip,
+                            'frontend_url': f'http://{ip}:5173',
+                            'backend_url': f'http://{ip}:8000',
+                            'status': status,
+                            'last_checked': str(datetime.now())
+                        }
+                        print(f"[Network Status] {category} network detected: {ip} (status: {status})")
+                        
+                        # Log network detection event
+                        logger.log_network_event(
+                            event_type="detection",
+                            network_type=category,
+                            ip_address=ip,
+                            status=status,
+                            frontend_url=f'http://{ip}:5173',
+                            backend_url=f'http://{ip}:8000',
+                            metadata={
+                                "detection_method": "network-status-endpoint",
+                                "is_reachable": is_reachable,
+                                "detected_ips_count": len(detected_ips)
+                            }
+                        )
+                
+                return JSONResponse({
+                    "network_interfaces": network_interfaces,
+                    "total_interfaces": len(network_interfaces),
+                    "timestamp": str(datetime.now())
+                })
+            except Exception as e:
+                print(f"[Network Status] Error: {str(e)}")
+                return JSONResponse({
+                    "network_interfaces": {"error": f"Failed to detect interfaces: {str(e)}"},
+                    "total_interfaces": 0,
+                    "timestamp": str(datetime.now())
+                })
+
         @self.app.get("/api/config", dependencies=dependencies)
         async def get_config_info():
             """Get backend configuration information."""
             try:
                 import socket
+                from datetime import datetime
                 
                 available_bots = await self.client.get_available_bots()
                 
-                # Get network interfaces using socket
+                # Get network interfaces using comprehensive detection
                 network_interfaces = {}
                 try:
-                    # Get local IP addresses by connecting to external addresses
+                    import subprocess
+                    import platform
+                    
+                    detected_ips = set()
+                    
+                    # Method 1: Use platform-specific commands for comprehensive interface detection
+                    system = platform.system().lower()
+                    
+                    if system == "darwin":  # macOS
+                        try:
+                            # Get all interface IPs using ifconfig
+                            result = subprocess.run(['ifconfig'], capture_output=True, text=True, timeout=5)
+                            if result.returncode == 0:
+                                lines = result.stdout.split('\n')
+                                for line in lines:
+                                    if 'inet ' in line and 'inet 127.' not in line and 'inet 169.254.' not in line:
+                                        # Extract IP using split
+                                        parts = line.split()
+                                        if len(parts) >= 2:
+                                            ip = parts[1]
+                                            # Validate it's a proper IP
+                                            if '.' in ip and not ip.startswith('127.') and not ip.startswith('169.254.'):
+                                                detected_ips.add(ip)
+                        except (subprocess.TimeoutExpired, subprocess.SubprocessError, FileNotFoundError):
+                            pass
+                    
+                    elif system == "linux":
+                        try:
+                            # Try ip command first
+                            result = subprocess.run(['ip', 'addr', 'show'], capture_output=True, text=True, timeout=5)
+                            if result.returncode == 0:
+                                lines = result.stdout.split('\n')
+                                for line in lines:
+                                    if 'inet ' in line and '/127.' not in line and '/169.254.' not in line:
+                                        # Extract IP using split
+                                        parts = line.strip().split()
+                                        for part in parts:
+                                            if '.' in part and '/' in part:
+                                                ip = part.split('/')[0]
+                                                if not ip.startswith('127.') and not ip.startswith('169.254.'):
+                                                    detected_ips.add(ip)
+                        except (subprocess.TimeoutExpired, subprocess.SubprocessError, FileNotFoundError):
+                            # Fallback to ifconfig on Linux
+                            try:
+                                result = subprocess.run(['ifconfig'], capture_output=True, text=True, timeout=5)
+                                if result.returncode == 0:
+                                    lines = result.stdout.split('\n')
+                                    for line in lines:
+                                        if 'inet ' in line and 'inet 127.' not in line:
+                                            parts = line.split()
+                                            if len(parts) >= 2:
+                                                ip = parts[1]
+                                                if '.' in ip and not ip.startswith('127.') and not ip.startswith('169.254.'):
+                                                    detected_ips.add(ip)
+                            except (subprocess.TimeoutExpired, subprocess.SubprocessError, FileNotFoundError):
+                                pass
+                    
+                    # Method 2: Fallback to socket-based detection for any missed interfaces
                     test_connections = [
                         ('8.8.8.8', 80),  # Google DNS
                         ('1.1.1.1', 80),  # Cloudflare DNS
                     ]
                     
-                    local_ips = set()
                     for host, port in test_connections:
                         try:
                             with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
                                 s.connect((host, port))
                                 local_ip = s.getsockname()[0]
-                                if not local_ip.startswith('127.'):
-                                    local_ips.add(local_ip)
+                                if not local_ip.startswith('127.') and not local_ip.startswith('169.254.'):
+                                    detected_ips.add(local_ip)
                         except:
                             continue
                     
-                    # Categorize the IPs
-                    for ip in local_ips:
+                    # Method 3: Also try connecting to common local network gateways
+                    local_gateways = ['192.168.1.1', '192.168.0.1', '10.0.0.1', '172.16.0.1']
+                    for gateway in local_gateways:
+                        try:
+                            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+                                s.settimeout(1)
+                                s.connect((gateway, 53))  # DNS port
+                                local_ip = s.getsockname()[0]
+                                if not local_ip.startswith('127.') and not local_ip.startswith('169.254.'):
+                                    detected_ips.add(local_ip)
+                        except:
+                            continue
+                    
+                    print(f"[Network Detection] Found IPs: {sorted(detected_ips)}")
+                    
+                    # Categorize and test connectivity of detected IPs
+                    for ip in detected_ips:
+                        category = None
                         if ip.startswith('100.64.'):
-                            network_interfaces['tailscale'] = {
-                                'ip': ip,
-                                'frontend_url': f'http://{ip}:5173',
-                                'backend_url': f'http://{ip}:8000'
-                            }
+                            category = 'tailscale'
+                        elif ip.startswith('172.29.'):
+                            category = 'compsci_vpn'
                         elif ip.startswith('172.31.'):
-                            network_interfaces['compsci'] = {
-                                'ip': ip,
-                                'frontend_url': f'http://{ip}:5173',
-                                'backend_url': f'http://{ip}:8000'
-                            }
+                            category = 'compsci_wifi'
                         elif ip.startswith('192.168.') or ip.startswith('10.'):
-                            network_interfaces['local'] = {
+                            category = 'local'
+                        
+                        if category:
+                            # Always add detected interfaces (if we can detect them, they're likely usable)
+                            network_interfaces[category] = {
                                 'ip': ip,
                                 'frontend_url': f'http://{ip}:5173',
-                                'backend_url': f'http://{ip}:8000'
+                                'backend_url': f'http://{ip}:8000',
+                                'status': 'detected'
                             }
+                            print(f"[Network Detection] {category} network detected: {ip}")
+                            
+                            # Log network detection event
+                            logger.log_network_event(
+                                event_type="detection",
+                                network_type=category,
+                                ip_address=ip,
+                                status='detected',
+                                frontend_url=f'http://{ip}:5173',
+                                backend_url=f'http://{ip}:8000',
+                                metadata={
+                                    "detection_method": "config-endpoint",
+                                    "detected_ips_count": len(detected_ips)
+                                }
+                            )
                     
                 except Exception as e:
+                    print(f"[Network Detection] Error: {str(e)}")
                     network_interfaces = {"error": f"Failed to detect interfaces: {str(e)}"}
                 
                 config_info = {
@@ -588,6 +818,9 @@ class WebApp:
                         "/api/conversations/search",  # Advanced search with filtering/sorting
                         "/api/bots",  # Enhanced with conversation-specific locking
                         "/api/stats",  # Comprehensive statistics
+                        "/api/network-status",  # Dynamic network interface detection
+                        "/api/logs/network",  # Network activity logs
+                        "/api/logs/system",  # System activity logs
                         "/api/config",
                         "/api/conversation/new",
                         "/api/conversation/{id}/messages",
@@ -618,6 +851,60 @@ class WebApp:
             except Exception as e:
                 raise HTTPException(status_code=500, detail=str(e))
         
+        @self.app.get("/api/logs/network", dependencies=dependencies)
+        async def get_network_logs(
+            limit: int = 100,
+            network_type: str = None,
+            since: str = None
+        ):
+            """Get network activity logs."""
+            try:
+                logs = logger.get_network_logs(
+                    limit=limit,
+                    network_type=network_type,
+                    since=since
+                )
+                summary = logger.get_network_summary()
+                
+                return JSONResponse({
+                    "logs": logs,
+                    "summary": summary,
+                    "total_logs": len(logs),
+                    "filters": {
+                        "limit": limit,
+                        "network_type": network_type,
+                        "since": since
+                    }
+                })
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=str(e))
+
+        @self.app.get("/api/logs/system", dependencies=dependencies)
+        async def get_system_logs(
+            limit: int = 100,
+            component: str = None,
+            since: str = None
+        ):
+            """Get system activity logs."""
+            try:
+                logs = logger.get_system_logs(
+                    limit=limit,
+                    component=component,
+                    since=since
+                )
+                
+                return JSONResponse({
+                    "logs": logs,
+                    "total_logs": len(logs),
+                    "filters": {
+                        "limit": limit,
+                        "component": component,
+                        "since": since
+                    }
+                })
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=str(e))
+
         @self.app.websocket("/ws/chat/{conversation_id}")
         async def websocket_chat(websocket: WebSocket, conversation_id: str):
             """WebSocket endpoint for real-time chat."""
@@ -733,6 +1020,16 @@ class WebApp:
     
     async def close(self):
         """Clean up resources."""
+        # Log system shutdown
+        logger.log_system_event(
+            event_type="shutdown",
+            component="backend",
+            action="stop",
+            metadata={
+                "active_connections": len(self.active_connections),
+                "graceful_shutdown": True
+            }
+        )
         await self.client.close()
 
 def create_app(config: Config = None) -> FastAPI:
