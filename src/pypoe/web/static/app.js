@@ -5,6 +5,7 @@ class PyPoeApp {
         this.conversations = [];
         this.stats = {};
         this.currentConversation = null;
+        this.streamingContent = '';
         
         this.initializeElements();
         this.bindEvents();
@@ -247,21 +248,77 @@ class PyPoeApp {
                 break;
             case 'bot_response_start':
                 this.currentBotMessage = this.addMessage('', 'assistant', true);
+                this.streamingContent = ''; // Track streaming content
+                this.isShowingThinking = false; // Track if we're showing thinking message
                 break;
             case 'bot_response_chunk':
-                if (this.currentBotMessage) {
-                    this.currentBotMessage.querySelector('.message-content').textContent += data.content;
+                if (this.currentBotMessage && data.content) {
+                    const contentDiv = this.currentBotMessage.querySelector('.message-content');
+                    
+                    // Check if this chunk is a thinking/generating message
+                    if (this.isThinkingMessage(data.content)) {
+                        // Show thinking message temporarily (only if we haven't shown real content yet)
+                        if (!this.streamingContent || this.isShowingThinking) {
+                            // Remove typing indicator if present
+                            const typingIndicator = contentDiv.querySelector('.typing-indicator');
+                            if (typingIndicator) {
+                                typingIndicator.remove();
+                            }
+                            
+                            contentDiv.textContent = data.content;
+                            this.isShowingThinking = true;
+                            this.scrollToBottom();
+                        }
+                        return; // Don't accumulate thinking messages
+                    }
+                    
+                    // Real content arrived - replace thinking message if showing
+                    if (this.isShowingThinking) {
+                        this.streamingContent = ''; // Reset accumulated content
+                        this.isShowingThinking = false;
+                    }
+                    
+                    // Accumulate real content
+                    this.streamingContent += data.content;
+                    
+                    // Remove typing indicator if present
+                    const typingIndicator = contentDiv.querySelector('.typing-indicator');
+                    if (typingIndicator) {
+                        typingIndicator.remove();
+                    }
+                    
+                    // Update content with processed display
+                    const processedContent = this.processContentForDisplay(this.streamingContent);
+                    if (processedContent !== this.streamingContent) {
+                        contentDiv.innerHTML = processedContent;
+                    } else {
+                        contentDiv.textContent = this.streamingContent;
+                    }
+                    
                     this.scrollToBottom();
                 }
                 break;
             case 'bot_response_end':
+                // Final processing of complete message
+                if (this.currentBotMessage && this.streamingContent) {
+                    const contentDiv = this.currentBotMessage.querySelector('.message-content');
+                    const processedContent = this.processContentForDisplay(this.streamingContent);
+                    if (processedContent !== this.streamingContent) {
+                        contentDiv.innerHTML = processedContent;
+                    } else {
+                        contentDiv.textContent = this.streamingContent;
+                    }
+                }
                 this.currentBotMessage = null;
+                this.streamingContent = '';
                 this.messageInput.disabled = false;
                 this.sendBtn.disabled = false;
                 break;
             case 'error':
                 this.addMessage(data.content, 'error', false);
                 break;
+            default:
+                console.log('Unknown message type:', data.type);
         }
     }
     
@@ -278,7 +335,16 @@ class PyPoeApp {
         
         const contentDiv = document.createElement('div');
         contentDiv.className = 'message-content';
-        contentDiv.textContent = content;
+        
+        // Process content for images
+        const processedContent = this.processContentForDisplay(content);
+        if (processedContent !== content) {
+            // Content contains HTML (processed images)
+            contentDiv.innerHTML = processedContent;
+        } else {
+            // Plain text content
+            contentDiv.textContent = content;
+        }
         
         if (streaming) {
             const typingIndicator = document.createElement('div');
@@ -420,9 +486,9 @@ class PyPoeApp {
     updateLockingLogic() {
         const chatMode = this.globalChatMode ? this.globalChatMode.value : 'chatbot';
         
-        // Chat mode locking: lock when no conversation is selected
-        if (!this.currentConversationId) {
-            this.lockChatMode(true, 'Select a conversation first');
+        // Chat mode locking: lock when viewing an existing conversation
+        if (this.currentConversationId) {
+            this.lockChatMode(true, 'Chat mode is locked for existing conversations');
         } else {
             this.lockChatMode(false);
         }
@@ -658,10 +724,36 @@ class PyPoeApp {
         }
     }
     
-    escapeHtml(text) {
+        escapeHtml(text) {
         const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
+    }
+    
+    isThinkingMessage(content) {
+        // Detect thinking/generating messages
+        const thinkingPattern = /^(Thinking|Generating)\.+(\s*\(\d+s elapsed\))?$/;
+        const trimmedContent = content.trim();
+        return thinkingPattern.test(trimmedContent);
+    }
+    
+    shouldFilterContent(content) {
+        // This function is now mainly used for legacy compatibility
+        // The new logic handles thinking messages in handleWebSocketMessage
+        return false;
+    }
+    
+    processContentForDisplay(content) {
+        if (!content) return content;
+        
+        let processedContent = this.escapeHtml(content);
+        
+        // Convert markdown images to clickable links
+        const imagePattern = /!\[([^\]]*)\]\(([^)]+)\)/g;
+        return processedContent.replace(imagePattern, (match, altText, url) => {
+            const displayText = altText || 'Generated Image';
+            return `<a href="${url}" target="_blank" class="image-link" title="Click to open image in new tab">🖼️ ${displayText}</a>`;
+        });
     }
 }
 

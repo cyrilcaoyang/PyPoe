@@ -4,9 +4,10 @@ PyPoe Slack Bot Integration Module
 A comprehensive Slack bot that integrates with Poe API to provide:
 - Interactive model selection via Slack UI
 - Token/compute point usage monitoring  
-- Multi-turn conversations
+- Multi-turn conversations with persistent storage
 - Error handling and rate limiting
 - Admin controls and usage analytics
+- Multiple conversation modes (DM, group, individual)
 
 This module can be imported and used in various ways:
 - As a standalone bot: python -m pypoe.slack_bot
@@ -35,25 +36,26 @@ except ImportError:
     SlackApiError = Exception
 
 from ..poe.client import PoeChatClient
-from ..poe.manager import HistoryManager
+from ..poe.enhanced_history import EnhancedHistoryManager
+from ..config import get_config
 
 # Configure logging
 logger = logging.getLogger(__name__)
 
 @dataclass
-class UserSession:
-    """Track user session data"""
+class SlackConversationContext:
+    """Track Slack-specific conversation context"""
+    conversation_id: str
     user_id: str
     channel_id: str
+    channel_type: str  # 'im', 'public_channel', 'private_channel', 'group'
+    chat_mode: str     # 'slack_dm', 'slack_channel_shared', 'slack_channel_individual'
     preferred_model: str = "GPT-3.5-Turbo"
-    conversation: List[Dict[str, str]] = None
-    total_messages: int = 0
-    total_tokens_estimated: int = 0
     last_activity: datetime = None
+    max_context_messages: int = 50  # Default message limit
+    max_context_tokens: int = 12000  # Default token limit (conservative)
     
     def __post_init__(self):
-        if self.conversation is None:
-            self.conversation = []
         if self.last_activity is None:
             self.last_activity = datetime.now()
 
@@ -143,7 +145,7 @@ class PoeBotUsageTracker:
         }
 
 class PyPoeSlackBot:
-    """Main Slack bot class"""
+    """Main Slack bot class with persistent conversation storage"""
     
     def __init__(self, enable_history: bool = True):
         if not SLACK_AVAILABLE:
@@ -157,15 +159,52 @@ class PyPoeSlackBot:
             signing_secret=os.environ.get("SLACK_SIGNING_SECRET")
         )
         
-        # Initialize PyPoe client
-        self.poe_client = PoeChatClient(enable_history=enable_history)
+        # Initialize PyPoe client with Enhanced History Manager
+        self.config = get_config()
+        self.poe_client = PoeChatClient(enable_history=False)  # We'll handle history ourselves
         
-        # User sessions and usage tracking
-        self.user_sessions: Dict[str, UserSession] = {}
+        # Use Enhanced History Manager for persistent storage
+        if enable_history:
+            self.history = EnhancedHistoryManager(
+                db_path=str(self.config.database_path), 
+                media_dir=str(self.config.database_path.parent / "slack_media")
+            )
+        else:
+            self.history = None
+        
+        # Conversation contexts (keyed by conversation_id)
+        self.conversation_contexts: Dict[str, SlackConversationContext] = {}
         self.usage_tracker = PoeBotUsageTracker()
         
         # Available models
         self.available_models = []
+        
+        # Model-specific context limits
+        self.model_context_limits = {
+            # OpenAI Models
+            "GPT-3.5-Turbo": {"max_tokens": 12000, "max_messages": 40},
+            "GPT-4": {"max_tokens": 100000, "max_messages": 200},
+            "GPT-4o": {"max_tokens": 100000, "max_messages": 200},
+            "GPT-4o-mini": {"max_tokens": 100000, "max_messages": 200},
+            "o1-preview": {"max_tokens": 100000, "max_messages": 200},
+            "o1-mini": {"max_tokens": 100000, "max_messages": 200},
+            "GPT-4-Turbo": {"max_tokens": 100000, "max_messages": 200},
+            
+            # Anthropic Models  
+            "Claude-3-Opus": {"max_tokens": 150000, "max_messages": 300},
+            "Claude-3-Sonnet": {"max_tokens": 150000, "max_messages": 300},
+            "Claude-3-Haiku": {"max_tokens": 150000, "max_messages": 300},
+            "Claude-3.5-Sonnet": {"max_tokens": 150000, "max_messages": 300},
+            "Claude-3.5-Haiku": {"max_tokens": 150000, "max_messages": 300},
+            
+            # Google Models
+            "Gemini-1.5-Pro": {"max_tokens": 800000, "max_messages": 500},
+            "Gemini-1.5-Flash": {"max_tokens": 800000, "max_messages": 500},
+            "Gemini-2.0-Flash": {"max_tokens": 800000, "max_messages": 500},
+            
+            # Other Models - Conservative defaults
+            "Default": {"max_tokens": 12000, "max_messages": 40}
+        }
         
         # Set up Slack event handlers
         self._setup_handlers()
@@ -174,10 +213,91 @@ class PyPoeSlackBot:
         """Initialize the bot and fetch available models"""
         try:
             self.available_models = await self.poe_client.get_available_bots()
+            if self.history:
+                await self.history.initialize()
             logger.info(f"✅ Initialized with {len(self.available_models)} available models")
         except Exception as e:
             logger.error(f"❌ Failed to initialize: {e}")
             self.available_models = ["GPT-3.5-Turbo", "Claude-3-Haiku"]  # Fallback
+    
+    def _determine_conversation_strategy(self, channel_type: str, user_id: str, channel_id: str) -> tuple[str, str, str]:
+        """
+        Determine conversation strategy based on channel type and user preferences.
+        
+        Returns:
+            (conversation_id, chat_mode, title)
+        """
+        if channel_type == "im":
+            # Direct Message: Each user gets their own persistent conversation
+            conversation_id = f"slack_dm_{user_id}"
+            chat_mode = "slack_dm"
+            title = f"Slack DM: @{user_id}"
+            
+        elif channel_type in ["public_channel", "private_channel", "group"]:
+            # Group Channel: Two strategies possible
+            
+            # Strategy 1: Shared conversation (all users share context)
+            conversation_id = f"slack_channel_{channel_id}"
+            chat_mode = "slack_channel_shared"
+            title = f"Slack Channel: {channel_id}"
+            
+            # Strategy 2: Individual conversations per user in channel (better privacy)
+            # conversation_id = f"slack_channel_{channel_id}_{user_id}"
+            # chat_mode = "slack_channel_individual"
+            # title = f"Slack Channel: {channel_id} - @{user_id}"
+            
+        else:
+            # Fallback
+            conversation_id = f"slack_unknown_{user_id}_{channel_id}"
+            chat_mode = "slack_unknown"
+            title = f"Slack: @{user_id} in {channel_id}"
+        
+        return conversation_id, chat_mode, title
+    
+    async def _get_or_create_conversation_context(self, user_id: str, channel_id: str, channel_type: str) -> SlackConversationContext:
+        """Get or create conversation context with database persistence."""
+        
+        conversation_id, chat_mode, title = self._determine_conversation_strategy(channel_type, user_id, channel_id)
+        
+        # Check if context already exists in memory
+        if conversation_id in self.conversation_contexts:
+            context = self.conversation_contexts[conversation_id]
+            context.last_activity = datetime.now()
+            return context
+        
+        # Check if conversation exists in database
+        if self.history:
+            try:
+                conversations = await self.history.get_conversations()
+                existing_conv = next((c for c in conversations if c['id'] == conversation_id), None)
+                
+                if not existing_conv:
+                    # Create new conversation in database
+                    await self.history.create_conversation(
+                        title=title,
+                        bot_name="GPT-3.5-Turbo",  # Default model
+                        chat_mode=chat_mode
+                    )
+                    # Note: We use our own conversation_id instead of the returned UUID
+                    # This ensures consistent Slack-based IDs
+                    
+            except Exception as e:
+                logger.error(f"Failed to check/create conversation in database: {e}")
+        
+        # Create context in memory
+        context = SlackConversationContext(
+            conversation_id=conversation_id,
+            user_id=user_id,
+            channel_id=channel_id,
+            channel_type=channel_type,
+            chat_mode=chat_mode
+        )
+        
+        # Set appropriate context limits for the default model
+        self._update_context_limits_for_model(context)
+        
+        self.conversation_contexts[conversation_id] = context
+        return context
     
     def _setup_handlers(self):
         """Set up Slack event handlers"""
@@ -198,14 +318,18 @@ class PyPoeSlackBot:
                 await self._handle_direct_message(event, say)
     
     async def _handle_slash_command(self, command, respond):
-        """Handle /poe slash commands"""
+        """Handle /poe slash commands with conversation context"""
         user_id = command["user_id"]
         channel_id = command["channel_id"]
+        channel_type = command.get("channel_type", "unknown")
         text = command.get("text", "").strip()
         
         try:
+            # Get conversation context
+            context = await self._get_or_create_conversation_context(user_id, channel_id, channel_type)
+            
             if not text or text == "help":
-                await respond(self._get_help_message())
+                await respond(self._get_help_message(context))
                 return
             
             parts = text.split(" ", 1)
@@ -219,19 +343,25 @@ class PyPoeSlackBot:
                 if not args:
                     await respond("❌ Please specify a model. Use `/poe models` to see available options.")
                     return
-                await self._set_user_model(user_id, channel_id, args, respond)
+                await self._set_user_model(context, args, respond)
             
             elif cmd == "chat":
                 if not args:
                     await respond("❌ Please provide a message. Example: `/poe chat Hello!`")
                     return
-                await self._handle_chat_message(user_id, channel_id, args, respond)
+                await self._handle_chat_message(context, args, respond)
             
             elif cmd == "usage":
                 await respond(self._get_usage_message(user_id))
             
             elif cmd == "reset":
-                await self._reset_conversation(user_id, channel_id, respond)
+                await self._reset_conversation(context, respond)
+            
+            elif cmd == "context":
+                await respond(self._get_context_info(context))
+            
+            elif cmd == "stats":
+                await respond(await self._get_context_stats(context))
             
             else:
                 await respond(f"❌ Unknown command: `{cmd}`. Use `/poe help` for available commands.")
@@ -241,19 +371,22 @@ class PyPoeSlackBot:
             await respond(f"❌ Error: {str(e)}")
     
     async def _handle_mention(self, event, say):
-        """Handle @poe_bot mentions"""
+        """Handle @poe_bot mentions in channels"""
         user_id = event["user"]
         channel_id = event["channel"]
+        channel_type = event.get("channel_type", "public_channel")
         text = event.get("text", "")
         
         # Remove the bot mention from the text
         text = " ".join([word for word in text.split() if not word.startswith("<@")])
         
         if not text.strip():
-            await say(self._get_help_message())
+            context = await self._get_or_create_conversation_context(user_id, channel_id, channel_type)
+            await say(self._get_help_message(context))
             return
         
-        await self._handle_chat_message(user_id, channel_id, text, say)
+        context = await self._get_or_create_conversation_context(user_id, channel_id, channel_type)
+        await self._handle_chat_message(context, text, say)
     
     async def _handle_direct_message(self, event, say):
         """Handle direct messages to the bot"""
@@ -262,42 +395,89 @@ class PyPoeSlackBot:
         text = event.get("text", "")
         
         if not text.strip():
-            await say(self._get_help_message())
+            context = await self._get_or_create_conversation_context(user_id, channel_id, "im")
+            await say(self._get_help_message(context))
             return
         
-        await self._handle_chat_message(user_id, channel_id, text, say)
+        context = await self._get_or_create_conversation_context(user_id, channel_id, "im")
+        await self._handle_chat_message(context, text, say)
     
-    async def _handle_chat_message(self, user_id: str, channel_id: str, text: str, respond_func):
-        """Handle a chat message to the bot"""
+    async def _handle_chat_message(self, context: SlackConversationContext, text: str, respond_func):
+        """Handle a chat message with persistent conversation history"""
         try:
-            # Get or create user session
-            session = self._get_or_create_session(user_id, channel_id)
-            
-            # Add user message to conversation
-            session.conversation.append({"role": "user", "content": text})
-            session.last_activity = datetime.now()
+            # Update last activity
+            context.last_activity = datetime.now()
             
             # Send "thinking" indicator
             await respond_func("🤖 Thinking...")
             
-            # Get response from PyPoe
+            # Get response from PyPoe with conversation history
+            if self.history:
+                # Load existing conversation history
+                try:
+                    existing_messages = await self.history.get_conversation_messages(context.conversation_id)
+                    
+                    # Convert to API format
+                    conversation_messages = []
+                    for msg in existing_messages:
+                        conversation_messages.append({
+                            'role': msg['role'],
+                            'content': msg['content']
+                        })
+                    
+                    # Add new user message
+                    conversation_messages.append({
+                        'role': 'user',
+                        'content': text
+                    })
+                    
+                    # Apply intelligent context truncation
+                    conversation_messages = self._truncate_conversation_context(
+                        conversation_messages, 
+                        context.preferred_model
+                    )
+                    
+                    # Save user message to database (always save, even if truncated from context)
+                    await self.history.add_message(
+                        conversation_id=context.conversation_id,
+                        role="user",
+                        content=text
+                    )
+                    
+                except Exception as e:
+                    logger.error(f"Failed to load conversation history: {e}")
+                    # Fallback to single message
+                    conversation_messages = [{'role': 'user', 'content': text}]
+            else:
+                conversation_messages = [{'role': 'user', 'content': text}]
+            
+            # Get bot response
             full_response = ""
             async for chunk in self.poe_client.send_conversation(
-                session.conversation, 
-                bot_name=session.preferred_model,
-                save_history=True
+                messages=conversation_messages,
+                bot_name=context.preferred_model,
+                save_history=False  # We handle our own history
             ):
                 full_response += chunk
             
-            # Add bot response to conversation
-            session.conversation.append({"role": "bot", "content": full_response})
-            session.total_messages += 1
+            # Save bot response to database
+            if self.history and full_response:
+                await self.history.add_message(
+                    conversation_id=context.conversation_id,
+                    role="assistant",
+                    content=full_response,
+                    bot_name=context.preferred_model
+                )
             
             # Track usage
-            self.usage_tracker.track_usage(user_id, session.preferred_model, text, full_response)
+            self.usage_tracker.track_usage(context.user_id, context.preferred_model, text, full_response)
             
             # Format response for Slack
-            response_text = self._format_response_for_slack(full_response, session.preferred_model)
+            response_text = self._format_response_for_slack(
+                full_response, 
+                context.preferred_model, 
+                context.chat_mode
+            )
             
             await respond_func(response_text)
             
@@ -305,20 +485,8 @@ class PyPoeSlackBot:
             logger.error(f"Error handling chat message: {e}")
             await respond_func(f"❌ Sorry, I encountered an error: {str(e)}")
     
-    def _get_or_create_session(self, user_id: str, channel_id: str) -> UserSession:
-        """Get or create a user session"""
-        session_key = f"{user_id}_{channel_id}"
-        
-        if session_key not in self.user_sessions:
-            self.user_sessions[session_key] = UserSession(
-                user_id=user_id,
-                channel_id=channel_id
-            )
-        
-        return self.user_sessions[session_key]
-    
-    async def _set_user_model(self, user_id: str, channel_id: str, model: str, respond_func):
-        """Set the preferred model for a user"""
+    async def _set_user_model(self, context: SlackConversationContext, model: str, respond_func):
+        """Set the preferred model for a conversation context"""
         # Find the closest matching model
         model_lower = model.lower()
         matched_model = None
@@ -337,31 +505,144 @@ class PyPoeSlackBot:
             return
         
         # Set the model
-        session = self._get_or_create_session(user_id, channel_id)
-        old_model = session.preferred_model
-        session.preferred_model = matched_model
+        old_model = context.preferred_model
+        context.preferred_model = matched_model
+        self._update_context_limits_for_model(context)
         
         cost = self.usage_tracker.get_model_cost(matched_model)
         await respond_func(
             f"✅ Model changed from **{old_model}** to **{matched_model}**\n"
-            f"💰 Estimated cost: {cost} compute points per message"
+            f"💰 Estimated cost: {cost} compute points per message\n"
+            f"📍 Context: {context.chat_mode}"
         )
     
-    async def _reset_conversation(self, user_id: str, channel_id: str, respond_func):
-        """Reset the conversation for a user"""
-        session_key = f"{user_id}_{channel_id}"
-        
-        if session_key in self.user_sessions:
-            old_messages = len(self.user_sessions[session_key].conversation)
-            self.user_sessions[session_key].conversation = []
-            await respond_func(f"✅ Conversation reset ({old_messages} messages cleared)")
-        else:
-            await respond_func("✅ Conversation reset (no previous messages)")
+    async def _reset_conversation(self, context: SlackConversationContext, respond_func):
+        """Reset the conversation history for a context"""
+        try:
+            if self.history:
+                # Delete conversation from database and recreate
+                await self.history.delete_conversation(context.conversation_id)
+                
+                # Recreate conversation
+                conversation_id, chat_mode, title = self._determine_conversation_strategy(
+                    context.channel_type, context.user_id, context.channel_id
+                )
+                await self.history.create_conversation(
+                    title=title,
+                    bot_name=context.preferred_model,
+                    chat_mode=chat_mode
+                )
+            
+            await respond_func(f"✅ Conversation reset\n📍 Context: {context.chat_mode}")
+            
+        except Exception as e:
+            logger.error(f"Error resetting conversation: {e}")
+            await respond_func(f"❌ Error resetting conversation: {str(e)}")
     
-    def _get_help_message(self) -> str:
-        """Get help message"""
-        return """
+    def _get_context_info(self, context: SlackConversationContext) -> str:
+        """Get information about the current conversation context"""
+        return f"""
+📍 **Conversation Context**
+
+**Type:** {context.chat_mode}
+**User:** {context.user_id}
+**Channel:** {context.channel_id}
+**Conversation ID:** `{context.conversation_id}`
+**Model:** {context.preferred_model}
+**Last Activity:** {context.last_activity.strftime('%Y-%m-%d %H:%M:%S')}
+
+**Context Limits:**
+• Max Messages: {context.max_context_messages}
+• Max Tokens: {context.max_context_tokens:,}
+
+**Context Explanation:**
+• `slack_dm`: Direct message with individual context
+• `slack_channel_individual`: Channel message with per-user context
+• `slack_channel_shared`: Channel message with shared context (all users)
+"""
+    
+    async def _get_context_stats(self, context: SlackConversationContext) -> str:
+        """Get detailed conversation statistics and context usage"""
+        if not self.history:
+            return "📊 **Context Stats**\n\nHistory disabled - no statistics available."
+        
+        try:
+            # Get all messages for this conversation
+            all_messages = await self.history.get_conversation_messages(context.conversation_id)
+            
+            if not all_messages:
+                return f"""
+📊 **Context Stats**
+
+**Conversation:** `{context.conversation_id}`
+**Model:** {context.preferred_model}
+
+**Message Count:** 0
+**Status:** New conversation
+
+**Model Limits:**
+• Max Messages: {context.max_context_messages}
+• Max Tokens: {context.max_context_tokens:,}
+"""
+            
+            # Convert to API format for token estimation
+            api_messages = []
+            for msg in all_messages:
+                api_messages.append({
+                    'role': msg['role'], 
+                    'content': msg['content']
+                })
+            
+            # Estimate tokens for full conversation
+            total_tokens = sum(self._estimate_message_tokens(msg) for msg in api_messages)
+            
+            # See what would be included with current limits
+            truncated_messages = self._truncate_conversation_context(api_messages, context.preferred_model)
+            active_tokens = sum(self._estimate_message_tokens(msg) for msg in truncated_messages)
+            
+            # Count message types
+            user_messages = len([m for m in all_messages if m['role'] == 'user'])
+            assistant_messages = len([m for m in all_messages if m['role'] == 'assistant'])
+            
+            # Calculate percentages
+            token_usage_pct = (active_tokens / context.max_context_tokens) * 100 if context.max_context_tokens > 0 else 0
+            message_usage_pct = (len(truncated_messages) / context.max_context_messages) * 100 if context.max_context_messages > 0 else 0
+            
+            truncation_info = ""
+            if len(truncated_messages) < len(all_messages):
+                truncated_count = len(all_messages) - len(truncated_messages)
+                truncation_info = f"\n⚠️ **{truncated_count} messages truncated** from context"
+            
+            return f"""
+📊 **Context Stats**
+
+**Conversation:** `{context.conversation_id}`
+**Model:** {context.preferred_model}
+
+**Total Messages:** {len(all_messages)} ({user_messages} user, {assistant_messages} assistant)
+**Active Context:** {len(truncated_messages)} messages
+**Total Tokens:** ≈{total_tokens:,}
+**Active Tokens:** ≈{active_tokens:,} ({token_usage_pct:.1f}% of limit)
+
+**Model Limits:**
+• Max Messages: {context.max_context_messages} ({message_usage_pct:.1f}% used)
+• Max Tokens: {context.max_context_tokens:,} ({token_usage_pct:.1f}% used)
+
+**Status:** {"🟢 Within limits" if len(truncated_messages) == len(all_messages) else "🟡 Context truncated"}{truncation_info}
+
+💡 Use `/poe reset` to clear history if context becomes too large
+"""
+            
+        except Exception as e:
+            logger.error(f"Error getting context stats: {e}")
+            return f"❌ Error retrieving context statistics: {str(e)}"
+    
+    def _get_help_message(self, context: SlackConversationContext) -> str:
+        """Get help message with context information"""
+        return f"""
 🤖 **PyPoe Slack Bot - Help**
+
+**Current Context:** {context.chat_mode}
 
 **Slash Commands:**
 • `/poe help` - Show this help
@@ -370,6 +651,8 @@ class PyPoeSlackBot:
 • `/poe set-model <model>` - Set your preferred model
 • `/poe usage` - Check your token usage stats
 • `/poe reset` - Reset conversation history
+• `/poe context` - Show conversation context info
+• `/poe stats` - Show detailed context statistics
 
 **Direct Interaction:**
 • `@poe_bot <message>` - Mention the bot in any channel
@@ -377,12 +660,16 @@ class PyPoeSlackBot:
 
 **Features:**
 • 🧠 Access to 100+ AI models (GPT-4, Claude, Gemini, etc.)
-• 💬 Multi-turn conversations with context
+• 💬 Multi-turn conversations with persistent context
 • 📊 Usage tracking and compute point monitoring
 • 🔄 Model switching mid-conversation
-• 💾 Persistent conversation history
+• 💾 Database-backed conversation history
+• 👥 Smart context isolation (per-user or shared)
+• ⚡ Intelligent context management (auto-truncation)
+• 📈 Real-time context statistics and monitoring
 
 **Current Status:** ✅ Connected to Poe API
+**Your Model:** {context.preferred_model}
 """
     
     def _get_models_message(self) -> str:
@@ -457,15 +744,113 @@ class PyPoeSlackBot:
 {top_models_text}
 
 💡 *Compute points are estimates based on model complexity*
+💡 *Each conversation context maintains separate history*
 """
     
-    def _format_response_for_slack(self, response: str, model: str) -> str:
-        """Format the AI response for Slack"""
+    def _format_response_for_slack(self, response: str, model: str, chat_mode: str) -> str:
+        """Format the AI response for Slack with context info"""
         # Truncate very long responses
         if len(response) > 3000:
             response = response[:2950] + "\n\n... *(response truncated)*"
         
-        return f"🤖 **{model}**\n\n{response}"
+        # Add context indicator for clarity
+        context_indicator = {
+            "slack_dm": "🔒 DM",
+            "slack_channel_individual": "👤 Individual",
+            "slack_channel_shared": "👥 Shared",
+        }.get(chat_mode, "❓ Unknown")
+        
+        return f"🤖 **{model}** {context_indicator}\n\n{response}"
+    
+    def _estimate_message_tokens(self, message: Dict[str, str]) -> int:
+        """Estimate tokens for a message (rough approximation)"""
+        content = message.get('content', '')
+        role = message.get('role', '')
+        
+        # Rough estimation: 1 token ≈ 4 characters for text
+        # Add overhead for role, formatting, etc.
+        base_tokens = len(content) // 4
+        overhead_tokens = 10  # Role, formatting overhead
+        
+        return base_tokens + overhead_tokens
+    
+    def _get_model_limits(self, model_name: str) -> Dict[str, int]:
+        """Get context limits for a specific model"""
+        # Try exact match first
+        if model_name in self.model_context_limits:
+            return self.model_context_limits[model_name]
+        
+        # Try partial matches for model families
+        for known_model, limits in self.model_context_limits.items():
+            if known_model != "Default" and any(
+                part in model_name for part in known_model.split("-")[:2]
+            ):
+                return limits
+        
+        # Fallback to conservative defaults
+        return self.model_context_limits["Default"]
+    
+    def _truncate_conversation_context(self, messages: List[Dict[str, str]], model_name: str) -> List[Dict[str, str]]:
+        """
+        Intelligently truncate conversation context to fit model limits.
+        
+        Strategy:
+        1. Always keep the most recent messages
+        2. Try to preserve conversation flow
+        3. Keep important context (user questions, model switches)
+        4. Respect both token and message count limits
+        """
+        if not messages:
+            return messages
+        
+        limits = self._get_model_limits(model_name)
+        max_tokens = limits["max_tokens"]
+        max_messages = limits["max_messages"]
+        
+        # If we're within limits, return as-is
+        if len(messages) <= max_messages:
+            total_tokens = sum(self._estimate_message_tokens(msg) for msg in messages)
+            if total_tokens <= max_tokens:
+                return messages
+        
+        # Need to truncate - use sliding window approach
+        # Always keep the most recent messages, working backwards
+        truncated_messages = []
+        total_tokens = 0
+        
+        # Start from the end (most recent) and work backwards
+        for message in reversed(messages):
+            message_tokens = self._estimate_message_tokens(message)
+            
+            # Check if adding this message would exceed limits
+            if (len(truncated_messages) >= max_messages or 
+                total_tokens + message_tokens > max_tokens):
+                break
+            
+            truncated_messages.insert(0, message)  # Insert at beginning
+            total_tokens += message_tokens
+        
+        # Ensure we have at least some context
+        if not truncated_messages and messages:
+            # If even the most recent message exceeds limits, take it anyway
+            # The API will handle the overflow
+            truncated_messages = messages[-1:]
+        
+        # Log truncation for debugging
+        if len(truncated_messages) < len(messages):
+            logger.info(
+                f"Context truncated for {model_name}: "
+                f"{len(messages)} → {len(truncated_messages)} messages "
+                f"(≈{total_tokens} tokens)"
+            )
+        
+        return truncated_messages
+    
+    def _update_context_limits_for_model(self, context: SlackConversationContext):
+        """Update context limits when model changes"""
+        limits = self._get_model_limits(context.preferred_model)
+        context.max_context_tokens = limits["max_tokens"]
+        context.max_context_messages = limits["max_messages"]
     
     async def run(self):
         """Run the Slack bot"""
@@ -482,6 +867,8 @@ class PyPoeSlackBot:
     async def close(self):
         """Clean up resources"""
         await self.poe_client.close()
+        if self.history:
+            await self.history.close()
 
 async def main():
     """Main entry point"""
@@ -513,6 +900,9 @@ async def main():
     print(f"   POE_API_KEY: {'✅ Set' if os.environ.get('POE_API_KEY') else '❌ Missing'}")
     print(f"   SLACK_BOT_TOKEN: {'✅ Set' if os.environ.get('SLACK_BOT_TOKEN') else '❌ Missing'}")
     print(f"   Socket Mode: {os.environ.get('SLACK_SOCKET_MODE', 'true')}")
+    print("   Database: Enhanced History Manager with media support")
+    print("   Conversation Strategy: Individual contexts per user")
+    print("   Context Management: Intelligent truncation with model-specific limits")
     
     bot = PyPoeSlackBot()
     

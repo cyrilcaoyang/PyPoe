@@ -62,7 +62,7 @@ class WebApp:
         # Add CORS middleware for React frontend
         self.app.add_middleware(
             CORSMiddleware,
-            allow_origin_regex=r"https?://(localhost|127\.0\.0\.1|100\.64\.\d{1,3}\.\d{1,3}):(3000|5173|8000)",
+            allow_origin_regex=r"https?://(localhost|127\.0\.0\.1|192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|100\.64\.\d{1,3}\.\d{1,3}):(3000|5173|8000)",
             allow_credentials=True,
             allow_methods=["*"],
             allow_headers=["*"],
@@ -991,6 +991,7 @@ class WebApp:
                         "/api/storage/stats",  # Storage monitoring and analytics
                         "/api/storage/cleanup",  # Media cleanup operations
                         "/api/storage/conversations",  # Conversations with storage info
+                        "/api/account/status",  # Account status and usage monitoring
                         "/api/network-status",  # Dynamic network interface detection
                         "/api/logs/network",  # Network activity logs
                         "/api/logs/system",  # System activity logs
@@ -1010,6 +1011,7 @@ class WebApp:
                         "conversation_metadata": True,  # Message counts, locking info, etc.
                         "comprehensive_stats": True,  # Detailed statistics including word counts
                         "dynamic_locking": True,  # Context-aware bot/mode locking
+                        "account_monitoring": True,  # API key status and usage tracking
                         "authentication": bool(self.config.web_username),
                         "websocket_chat": True,
                         "api_only_mode": False,
@@ -1077,6 +1079,81 @@ class WebApp:
                 })
             except Exception as e:
                 raise HTTPException(status_code=500, detail=str(e))
+
+        @self.app.get("/api/account/status", dependencies=dependencies)
+        async def get_account_status():
+            """Get comprehensive account status information."""
+            try:
+                import time
+                from datetime import datetime, timedelta
+                
+                status_data = {
+                    "timestamp": datetime.now().isoformat(),
+                    "api_key_configured": bool(self.config.poe_api_key),
+                    "api_key_status": "unknown",
+                    "connectivity": {
+                        "status": "unknown",
+                        "response_time_ms": None,
+                        "last_checked": None
+                    },
+                    "storage_usage": {
+                        "database_size_mb": 0,
+                        "total_conversations": 0
+                    }
+                }
+                
+                # Test API key and connectivity
+                if self.config.poe_api_key:
+                    try:
+                        start_time = time.time()
+                        
+                        # Quick connectivity test - try to get available bots
+                        await self.client.get_available_bots()
+                        
+                        end_time = time.time()
+                        response_time = (end_time - start_time) * 1000  # Convert to milliseconds
+                        
+                        status_data["api_key_status"] = "valid"
+                        status_data["connectivity"]["status"] = "connected"
+                        status_data["connectivity"]["response_time_ms"] = round(response_time, 2)
+                        status_data["connectivity"]["last_checked"] = datetime.now().isoformat()
+                        
+                    except Exception as api_error:
+                        error_msg = str(api_error).lower()
+                        if "invalid" in error_msg or "unauthorized" in error_msg:
+                            status_data["api_key_status"] = "invalid"
+                        elif "insufficient" in error_msg or "quota" in error_msg:
+                            status_data["api_key_status"] = "quota_exceeded"
+                        else:
+                            status_data["api_key_status"] = "error"
+                        
+                        status_data["connectivity"]["status"] = "error"
+                        status_data["connectivity"]["error"] = str(api_error)
+                else:
+                    status_data["api_key_status"] = "not_configured"
+                
+                # Get storage information
+                try:
+                    import os
+                    if os.path.exists(self.config.database_path):
+                        db_size = os.path.getsize(self.config.database_path)
+                        status_data["storage_usage"]["database_size_mb"] = round(db_size / 1024 / 1024, 2)
+                    
+                    conversations = await self.client.get_conversations()
+                    status_data["storage_usage"]["total_conversations"] = len(conversations)
+                    
+                except Exception as storage_error:
+                    status_data["storage_usage"]["error"] = str(storage_error)
+                
+                return JSONResponse(status_data)
+                
+            except Exception as e:
+                return JSONResponse({
+                    "error": str(e),
+                    "timestamp": datetime.now().isoformat(),
+                    "api_key_configured": bool(self.config.poe_api_key),
+                    "api_key_status": "error"
+                }, status_code=500)
 
         @self.app.websocket("/ws/chat/{conversation_id}")
         async def websocket_chat(websocket: WebSocket, conversation_id: str):
@@ -1161,20 +1238,23 @@ class WebApp:
                         "role": "assistant"
                     }))
                     
-                    # Stream bot response
+                    # Stream bot response (filtering already handled in client.py)
                     full_response = ""
+                    
                     async for partial_response in self.client.send_message(
                         message=user_message,
                         bot_name=bot_name,
                         conversation_id=conversation_id,
                         save_history=True
                     ):
-                        full_response += partial_response
-                        await websocket.send_text(json.dumps({
-                            "type": "bot_response_chunk",
-                            "content": partial_response,
-                            "role": "assistant"
-                        }))
+                        # Only send non-empty chunks (client.py already filters generating messages)
+                        if partial_response:
+                            full_response += partial_response
+                            await websocket.send_text(json.dumps({
+                                "type": "bot_response_chunk",
+                                "content": partial_response,
+                                "role": "assistant"
+                            }))
                     
                     # Send bot response end indicator
                     await websocket.send_text(json.dumps({

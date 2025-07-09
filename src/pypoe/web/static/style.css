@@ -20,12 +20,12 @@ body {
 
 /* Left Panel: Sidebar Styles */
 .sidebar {
-    width: 350px;
-    background: #2c3e50;
+    width: 320px;
+    background: #eaf6ff; /* Light Blue Background */
     color: white;
     display: flex;
     flex-direction: column;
-    border-right: 1px solid #34495e;
+    border-right: 1px solid #d0e0ec;
 }
 
 .sidebar-header {
@@ -661,12 +661,48 @@ body {
     }
 }
 
+/* Image Links */
+.image-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: linear-gradient(135deg, #3498db, #2980b9);
+    color: white !important;
+    text-decoration: none;
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    font-weight: 500;
+    transition: all 0.3s ease;
+    margin: 4px 0;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.image-link:hover {
+    background: linear-gradient(135deg, #2980b9, #1f5f99);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(52, 152, 219, 0.3);
+}
+
+.image-link:active {
+    transform: translateY(0);
+}
+
+/* Message content with images */
+.message-content .image-link {
+    display: inline-block;
+    margin: 6px 0;
+}
+
+
+
 /* Input Area */
 .input-area {
     padding: 20px;
     border-top: 1px solid #ecf0f1;
     background: white;
     flex-shrink: 0; /* Prevent input area from shrinking */
+    margin-bottom: 40px; /* More space above status bar */
 }
 
 .input-container {
@@ -829,6 +865,7 @@ body {
     display: flex;
     justify-content: flex-end;
     gap: 10px;
+    margin-bottom: 20px; /* Extra space above status bar */
 }
 
 /* Responsive Design */
@@ -895,3 +932,193 @@ body {
 .messages-container::-webkit-scrollbar-thumb:hover {
     background: #7f8c8d;
 } 
+
+/* Status Bar */
+.status-bar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: #eaf6ff; /* Light Blue Background */
+    color: #2c3e50; /* Dark Font Color */
+    padding: 8px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 15px;
+    font-size: 0.85rem;
+    z-index: 1000;
+    border-top: 1px solid #d0e0ec; /* Light Border */
+    min-height: 40px;
+}
+
+.status-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px;
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.5); /* Semi-transparent white */
+    transition: all 0.3s ease;
+    color: #34495e; /* Dark Font Color */
+}
+
+.status-item i {
+    color: #3498db;
+    font-size: 0.8rem;
+}
+
+.status-item:hover {
+    background: rgba(255, 255, 255, 0.8); /* Lighter on hover */
+}
+
+.status-timestamp {
+    font-size: 0.75rem;
+    color: #7f8c8d; /* Muted dark color */
+    background: transparent !important;
+    margin-left: auto; /* Push timestamp to the right for balance */
+}
+
+.status-timestamp i {
+    color: #7f8c8d; /* Muted dark color */
+}
+
+/* Status indicators */
+.status-item.status-error {
+    background: rgba(231, 76, 60, 0.2);
+}
+
+.status-item.status-error i {
+    color: #e74c3c;
+}
+
+.status-item.status-warning {
+    background: rgba(241, 196, 15, 0.2);
+}
+
+.status-item.status-warning i {
+    color: #f1c40f;
+}
+
+.status-item.status-success {
+    background: rgba(46, 204, 113, 0.2);
+}
+
+.status-item.status-success i {
+    color: #2ecc71;
+}
+
+/* Adjust body padding to account for status bar */
+body {
+    padding-bottom: 80px; /* Extra padding for better spacing from status bar */
+}
+
+/* Responsive status bar */
+@media (max-width: 768px) {
+    .status-bar {
+        flex-wrap: wrap;
+        padding: 6px 10px;
+        font-size: 0.75rem;
+        gap: 4px;
+        justify-content: flex-start;
+    }
+    
+    .status-item {
+        padding: 2px 6px;
+        font-size: 0.7rem;
+    }
+    
+    .status-timestamp {
+        order: 1;
+        width: 100%;
+        text-align: left; /* Align timestamp to left on mobile for consistency */
+        margin-top: 4px;
+        margin-left: 0; /* Reset margin for mobile */
+    }
+    
+    /* Adjust body padding for mobile status bar height */
+    body {
+        padding-bottom: 100px; /* More padding for mobile wrapped status bar */
+    }
+}
+ 
+.storage-card {
+    background: #ffffff; /* Light Background */
+    border-radius: 8px;
+    padding: 20px;
+    border-left: 4px solid #3498db;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+.card-header h3 {
+    margin: 0;
+    color: #2c3e50; /* Dark Font */
+}
+
+.stat-item {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 10px;
+    padding: 8px 0;
+    border-bottom: 1px solid #ecf0f1; /* Lighter border */
+}
+
+.stat-label {
+    color: #7f8c8d; /* Muted Dark Font */
+}
+
+.stat-value {
+    color: #2c3e50; /* Dark Font */
+    font-weight: bold;
+}
+
+.progress-bar {
+    height: 8px;
+    background: #ecf0f1; /* Light gray background */
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.conversations-table {
+    background: #ffffff; /* Light Background */
+    border-radius: 8px;
+    overflow: hidden;
+    margin-bottom: 20px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+.table-header {
+    background: #f8f9fa; /* Very Light Background */
+    padding: 15px 20px;
+    color: #34495e; /* Dark Font */
+    font-weight: bold;
+    border-bottom: 1px solid #e9ecef;
+}
+
+.conversation-row {
+    display: grid;
+    grid-template-columns: 2fr 1fr 100px 100px 80px;
+    align-items: center;
+    padding: 15px 20px;
+    border-bottom: 1px solid #ecf0f1; /* Lighter border */
+    transition: background 0.3s ease;
+}
+
+.conversation-row:hover {
+    background: #f0f8ff; /* AliceBlue on hover */
+}
+
+.conversation-title {
+    color: #2c3e50; /* Dark Font */
+    font-weight: 500;
+}
+
+.conversation-bot {
+    color: #7f8c8d; /* Muted Dark Font */
+    font-size: 0.9rem;
+}
+
+.message-count {
+    color: #7f8c8d; /* Muted Dark Font */
+    text-align: center;
+}

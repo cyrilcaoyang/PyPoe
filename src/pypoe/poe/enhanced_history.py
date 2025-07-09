@@ -67,7 +67,7 @@ class EnhancedHistoryManager:
         }
 
     async def initialize(self):
-        """Creates the enhanced database schema."""
+        """Creates the enhanced database schema with migration from basic schema."""
         async with self._lock:
             async with aiosqlite.connect(self.db_path) as db:
                 # Enhanced conversations table
@@ -114,7 +114,47 @@ class EnhancedHistoryManager:
                     )
                 """)
                 
+                # Handle migration from basic schema to enhanced schema
+                await self._migrate_basic_to_enhanced(db)
+                
                 await db.commit()
+
+    async def _migrate_basic_to_enhanced(self, db):
+        """Migrate existing basic database schema to enhanced schema."""
+        try:
+            # Check if conversations table needs migration
+            cursor = await db.execute("PRAGMA table_info(conversations)")
+            columns = await cursor.fetchall()
+            column_names = [col[1] for col in columns]
+            
+            # Add missing columns to conversations table
+            if 'chat_mode' not in column_names:
+                await db.execute("ALTER TABLE conversations ADD COLUMN chat_mode TEXT DEFAULT 'chatbot'")
+                print("✅ Added chat_mode column to conversations table")
+            
+            if 'updated_at' not in column_names:
+                await db.execute("ALTER TABLE conversations ADD COLUMN updated_at DATETIME DEFAULT CURRENT_TIMESTAMP")
+                print("✅ Added updated_at column to conversations table")
+            
+            # Check if messages table needs migration
+            cursor = await db.execute("PRAGMA table_info(messages)")
+            columns = await cursor.fetchall()
+            column_names = [col[1] for col in columns]
+            
+            # Add missing columns to messages table
+            if 'content_type' not in column_names:
+                await db.execute("ALTER TABLE messages ADD COLUMN content_type TEXT DEFAULT 'text'")
+                print("✅ Added content_type column to messages table")
+            
+            if 'media_data' not in column_names:
+                await db.execute("ALTER TABLE messages ADD COLUMN media_data TEXT")
+                print("✅ Added media_data column to messages table")
+            
+            print("🔄 Database migration to enhanced schema completed successfully")
+            
+        except Exception as e:
+            print(f"⚠️  Database migration warning: {e}")
+            # Continue anyway - the tables should still work for basic functionality
 
     def _detect_media_content(self, content: str, bot_name: str) -> Dict[str, Any]:
         """Detect if content contains media URLs or is from a media model."""

@@ -59,9 +59,28 @@ async def main():
         
         # Demonstrate direct HistoryManager usage
         print("\nDemonstrating direct HistoryManager usage...")
-        manager = HistoryManager()
+        from pypoe.config import get_config
+        from pathlib import Path
+        
+        config = get_config()
+        media_dir = Path(config.database_path).parent / "media"
+        
+        manager = HistoryManager(
+            db_path=str(config.database_path),
+            media_dir=str(media_dir)
+        )
         await manager.initialize()
-        print(f"History database location: {manager.get_db_path()}")
+        print(f"History database location: {manager.db_path}")
+        
+        # Show enhanced features if available
+        if hasattr(manager, 'get_media_stats'):
+            try:
+                media_stats = await manager.get_media_stats()
+                print(f"Enhanced storage: {media_stats.get('total_files', 0)} media files")
+            except Exception:
+                print("Enhanced storage: Available but no media files yet")
+        else:
+            print("Enhanced storage: Not available")
         
         # Clean up
         await client.close()

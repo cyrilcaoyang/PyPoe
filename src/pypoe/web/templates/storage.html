@@ -7,6 +7,9 @@
     <link rel="stylesheet" href="/static/style.css">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
     <style>
+        body {
+            background-color: #f0f2f5; /* Light gray background for the whole page */
+        }
         .storage-container {
             max-width: 1200px;
             margin: 0 auto;
@@ -16,7 +19,7 @@
         .storage-header {
             text-align: center;
             margin-bottom: 30px;
-            color: #ecf0f1;
+            color: #2c3e50; /* Dark text */
         }
         
         .storage-grid {
@@ -602,5 +605,27 @@
         // Load initial data
         document.addEventListener('DOMContentLoaded', loadStorageData);
     </script>
+    
+    <script src="/static/status-bar.js"></script>
+
+    <!-- Status Bar -->
+    <div class="status-bar" id="status-bar">
+        <div class="status-item">
+            <i class="fas fa-key"></i>
+            <span id="status-api-key">API: Loading...</span>
+        </div>
+        <div class="status-item">
+            <i class="fas fa-wifi"></i>
+            <span id="status-connectivity">Connection: Loading...</span>
+        </div>
+        <div class="status-item">
+            <i class="fas fa-database"></i>
+            <span id="status-storage">Storage: Loading...</span>
+        </div>
+        <div class="status-item status-timestamp">
+            <i class="fas fa-clock"></i>
+            <span id="status-last-update">Never</span>
+        </div>
+    </div>
 </body>
 </html> 

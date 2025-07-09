@@ -14,13 +14,27 @@ from typing import Optional
 from .poe.client import PoeChatClient
 from .config import get_config
 
+def _create_history_manager():
+    """Create a HistoryManager with proper parameters for enhanced features."""
+    config = get_config()
+    from pathlib import Path
+    media_dir = Path(config.database_path).parent / "media"
+    return HistoryManager(
+        db_path=str(config.database_path),
+        media_dir=str(media_dir)
+    )
+
 # Import history manager from core package
 try:
-    from .poe.manager import HistoryManager
+    from .poe.enhanced_history import EnhancedHistoryManager as HistoryManager
     HISTORY_AVAILABLE = True
 except ImportError:
-    HISTORY_AVAILABLE = False
-    HistoryManager = None
+    try:
+        from .poe.manager import HistoryManager
+        HISTORY_AVAILABLE = True
+    except ImportError:
+        HISTORY_AVAILABLE = False
+        HistoryManager = None
 
 @click.group()
 @click.version_option()
@@ -131,8 +145,12 @@ async def _conversations(limit: int):
         return
     
     try:
-        manager = HistoryManager()
-        convs = await manager.get_conversations(limit=limit)
+        manager = _create_history_manager()
+        await manager.initialize()
+        convs = await manager.get_conversations()
+        
+        # Apply limit client-side since enhanced manager returns all
+        convs = convs[:limit]
         
         if not convs:
             click.echo("📭 No conversations found")
@@ -163,7 +181,8 @@ async def _messages(conversation_id: str):
         return
     
     try:
-        manager = HistoryManager()
+        manager = _create_history_manager()
+        await manager.initialize()
         msgs = await manager.get_conversation_messages(conversation_id)
         
         if not msgs:
@@ -198,8 +217,10 @@ async def _delete(conversation_id: str):
         return
     
     try:
-        manager = HistoryManager()
-        success = await manager.delete_conversation(conversation_id)
+        manager = _create_history_manager()
+        await manager.initialize()
+        await manager.delete_conversation(conversation_id)
+        success = True
         
         if success:
             click.echo(f"✅ Deleted conversation {conversation_id[:8]}...")
@@ -250,8 +271,8 @@ def status():
         click.echo("✅ History: Available")
         
         # Show database path
-        manager = HistoryManager()
-        db_path = manager.get_db_path()
+        manager = _create_history_manager()
+        db_path = str(manager.db_path)
         if os.path.exists(db_path):
             size = os.path.getsize(db_path)
             click.echo(f"📁 Database: {db_path} ({size} bytes)")
@@ -300,7 +321,8 @@ async def _history(export_format: str, limit: int):
         return
     
     try:
-        manager = HistoryManager()
+        manager = _create_history_manager()
+        await manager.initialize()
         conversations = await manager.get_conversations()
         
         if not conversations:
@@ -316,7 +338,8 @@ async def _history(export_format: str, limit: int):
             click.echo(json.dumps(conversations, indent=2))
         else:
             # Enhanced table format
-            click.echo(f"\n📚 Conversation History (showing {len(conversations)} of {len(await manager.get_conversations())})")
+            total_count = len(conversations) if limit >= len(conversations) else "many"
+            click.echo(f"\n📚 Conversation History (showing {len(conversations[:limit])} of {total_count})")
             click.echo("=" * 80)
             click.echo(f"{'ID':<10} {'Title':<30} {'Bot':<20} {'Created':<20}")
             click.echo("-" * 80)

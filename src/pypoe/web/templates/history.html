@@ -120,5 +120,27 @@
             {% endfor %}
         </div>
     </div>
+
+    <!-- Status Bar -->
+    <div class="status-bar" id="status-bar">
+        <div class="status-item">
+            <i class="fas fa-key"></i>
+            <span id="status-api-key">API: Loading...</span>
+        </div>
+        <div class="status-item">
+            <i class="fas fa-wifi"></i>
+            <span id="status-connectivity">Connection: Loading...</span>
+        </div>
+        <div class="status-item">
+            <i class="fas fa-database"></i>
+            <span id="status-storage">Storage: Loading...</span>
+        </div>
+        <div class="status-item status-timestamp">
+            <i class="fas fa-clock"></i>
+            <span id="status-last-update">Never</span>
+        </div>
+    </div>
+
+    <script src="/static/status-bar.js"></script>
 </body>
 </html> 

@@ -1,5 +1,6 @@
 import asyncio
 import sys
+import re
 from pathlib import Path
 from typing import AsyncGenerator, List, Dict, Any, Optional
 import fastapi_poe as fp
@@ -10,11 +11,86 @@ from ..config import get_config, Config
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "users"))
 
 try:
-    from .history import HistoryManager
+    from .enhanced_history import EnhancedHistoryManager as HistoryManager
     HISTORY_AVAILABLE = True
 except ImportError:
-    HISTORY_AVAILABLE = False
-    HistoryManager = None
+    try:
+        from .history import HistoryManager
+        HISTORY_AVAILABLE = True
+    except ImportError:
+        HISTORY_AVAILABLE = False
+        HistoryManager = None
+
+class ContentProcessor:
+    """Utility class for processing and filtering API responses."""
+    
+    def __init__(self):
+        self.last_generating_message = ""
+        self.generating_pattern = re.compile(r'^Generating\.+(\s*\(\d+s elapsed\))?$')
+        self.image_pattern = re.compile(r'!\[([^\]]*)\]\(([^)]+)\)')
+        
+    def should_filter_chunk(self, text: str) -> bool:
+        """Determine if a text chunk should be filtered out."""
+        if not text or not text.strip():
+            return True
+            
+        # Handle generating/thinking messages
+        if self.generating_pattern.match(text.strip()):
+            if text.strip() == self.last_generating_message:
+                return True  # Skip duplicate
+            self.last_generating_message = text.strip()
+            return False  # Allow first generating message to show (important for image generation)
+            
+        # Reset generating state when real content arrives
+        if self.last_generating_message:
+            self.last_generating_message = ""
+            
+        return False
+    
+    def process_content_for_display(self, content: str) -> str:
+        """Process content for display, converting images to clickable links."""
+        if not content:
+            return content
+            
+        # Convert markdown images to clickable HTML links
+        def replace_image(match):
+            alt_text = match.group(1) or "Generated Image"
+            url = match.group(2)
+            return f'<a href="{url}" target="_blank" class="image-link" title="Click to open image in new tab">🖼️ {alt_text}</a>'
+        
+        processed = self.image_pattern.sub(replace_image, content)
+        return processed
+    
+    def extract_media_urls(self, content: str) -> List[Dict[str, str]]:
+        """Extract media URLs from content for storage tracking."""
+        media_urls = []
+        
+        # Extract images
+        for match in self.image_pattern.finditer(content):
+            alt_text = match.group(1) or "Generated Image"
+            url = match.group(2)
+            media_urls.append({
+                'type': 'image',
+                'url': url,
+                'alt_text': alt_text,
+                'filename': self._extract_filename_from_url(url)
+            })
+        
+        return media_urls
+    
+    def _extract_filename_from_url(self, url: str) -> str:
+        """Extract a filename from a URL for storage purposes."""
+        # Try to extract filename from URL
+        parts = url.split('/')
+        if parts:
+            filename = parts[-1].split('?')[0]  # Remove query parameters
+            if '.' in filename:
+                return filename
+        
+        # Generate a fallback filename
+        import hashlib
+        url_hash = hashlib.md5(url.encode()).hexdigest()[:8]
+        return f"media_{url_hash}.png"
 
 class PoeChatClient:
     """A high-level client for interacting with Poe.com using the official API."""
@@ -26,9 +102,18 @@ class PoeChatClient:
         self.config = config
         self.api_key = config.poe_api_key
         self.enable_history = enable_history and HISTORY_AVAILABLE
+        self.content_processor = ContentProcessor()
         
         if self.enable_history:
-            self.history = HistoryManager(self.config.database_path)
+            # Setup media directory for enhanced history
+            from pathlib import Path
+            media_dir = Path(self.config.database_path).parent / "media"
+            
+            # Initialize with media directory for enhanced features
+            self.history = HistoryManager(
+                db_path=str(self.config.database_path),
+                media_dir=str(media_dir)
+            )
             self._history_initialized = False
         else:
             self.history = None
@@ -105,7 +190,8 @@ class PoeChatClient:
                     await self.history.add_message(
                         conversation_id=conversation_id,
                         role="user",
-                        content=message
+                        content=message,
+                        bot_name=bot_name
                     )
                 
                 # Use send_conversation for full context but don't save history 
@@ -125,7 +211,8 @@ class PoeChatClient:
                     await self.history.add_message(
                         conversation_id=conversation_id,
                         role="assistant",
-                        content=full_response
+                        content=full_response,
+                        bot_name=bot_name
                     )
                 return
                 
@@ -140,7 +227,8 @@ class PoeChatClient:
         if conversation_id is None and save_history and self.enable_history:
             conversation_id = await self.history.create_conversation(
                 title=f"Chat with {bot_name}",
-                bot_name=bot_name
+                bot_name=bot_name,
+                chat_mode="chatbot"
             )
         
         # Save the user message to history
@@ -148,13 +236,17 @@ class PoeChatClient:
             await self.history.add_message(
                 conversation_id=conversation_id,
                 role="user",
-                content=message
+                content=message,
+                bot_name=bot_name
             )
         
         # Prepare the message for the API
         poe_message = fp.ProtocolMessage(role="user", content=message)
         
-        # Stream the response with error handling
+        # Reset content processor state for new request
+        self.content_processor.last_generating_message = ""
+        
+        # Stream the response with error handling and content filtering
         full_response = ""
         try:
             async for partial in fp.get_bot_response(
@@ -163,8 +255,10 @@ class PoeChatClient:
                 api_key=self.api_key
             ):
                 if hasattr(partial, 'text') and partial.text:
-                    yield partial.text
-                    full_response += partial.text
+                    # Filter out generating messages and empty chunks
+                    if not self.content_processor.should_filter_chunk(partial.text):
+                        yield partial.text
+                        full_response += partial.text
         except Exception as e:
             error_msg = str(e)
             # Handle specific bot access errors
@@ -229,8 +323,12 @@ class PoeChatClient:
         if conversation_id is None and save_history and self.enable_history:
             conversation_id = await self.history.create_conversation(
                 title=f"Multi-turn chat with {bot_name}",
-                bot_name=bot_name
+                bot_name=bot_name,
+                chat_mode="chatbot"
             )
+        
+        # Reset content processor state for new request
+        self.content_processor.last_generating_message = ""
         
         # Convert messages to Poe format, mapping roles correctly
         poe_messages = [
@@ -247,10 +345,11 @@ class PoeChatClient:
                 await self.history.add_message(
                     conversation_id=conversation_id,
                     role=self._convert_role_for_history(msg["role"]),
-                    content=msg["content"]
+                    content=msg["content"],
+                    bot_name=bot_name
                 )
         
-        # Stream the response
+        # Stream the response with content filtering
         full_response = ""
         try:
             async for partial in fp.get_bot_response(
@@ -259,8 +358,10 @@ class PoeChatClient:
                 api_key=self.api_key
             ):
                 if hasattr(partial, 'text') and partial.text:
-                    yield partial.text
-                    full_response += partial.text
+                    # Filter out generating messages and empty chunks
+                    if not self.content_processor.should_filter_chunk(partial.text):
+                        yield partial.text
+                        full_response += partial.text
         except Exception as e:
             error_msg = str(e)
             # Handle specific bot access errors
@@ -297,7 +398,8 @@ class PoeChatClient:
             await self.history.add_message(
                 conversation_id=conversation_id,
                 role="assistant",  # Save as assistant in history
-                content=full_response
+                content=full_response,
+                bot_name=bot_name
             )
 
     async def get_available_bots(self) -> List[str]:
@@ -399,7 +501,7 @@ class PoeChatClient:
         if not self.enable_history:
             return []
         await self._ensure_history_initialized()
-        return await self.history.get_messages(conversation_id)
+        return await self.history.get_conversation_messages(conversation_id)
 
     async def delete_conversation(self, conversation_id: str):
         """Delete a conversation and all its messages."""

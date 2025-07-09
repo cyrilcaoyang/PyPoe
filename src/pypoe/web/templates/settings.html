@@ -231,6 +231,23 @@
                 </div>
             </div>
 
+            <!-- Account Status -->
+            <div class="settings-card">
+                <h3><i class="fas fa-user-circle"></i> Account Status</h3>
+                <div class="config-item">
+                    <span class="config-label">API Key</span>
+                    <span class="status-badge" id="api-key-status">Loading...</span>
+                </div>
+                <div class="config-item">
+                    <span class="config-label">Connectivity</span>
+                    <span class="status-badge" id="connectivity-status">Loading...</span>
+                </div>
+                <div class="config-item" id="response-time-item" style="display: none;">
+                    <span class="config-label">Response Time</span>
+                    <span class="config-value" id="response-time">-</span>
+                </div>
+            </div>
+
             <!-- Authentication -->
             <div class="settings-card">
                 <h3><i class="fas fa-shield-alt"></i> Authentication</h3>
@@ -285,8 +302,16 @@
     <script>
         async function loadSettings() {
             try {
-                const response = await fetch('/api/config');
-                const config = await response.json();
+                const [configResponse, accountResponse] = await Promise.all([
+                    fetch('/api/config'),
+                    fetch('/api/account/status')
+                ]);
+                
+                const config = await configResponse.json();
+                const account = await accountResponse.json();
+                
+                // Account Status
+                updateAccountStatus(account);
                 
                 // Backend Status
                 document.getElementById('backend-version').textContent = config.backend_version || 'Unknown';
@@ -357,6 +382,57 @@
             }
         }
 
+        function updateAccountStatus(account) {
+            // API Key Status
+            const apiKeyStatusEl = document.getElementById('api-key-status');
+            const apiKeyStatus = account.api_key_status || 'unknown';
+            
+            apiKeyStatusEl.textContent = {
+                'valid': 'Valid',
+                'invalid': 'Invalid',
+                'quota_exceeded': 'Quota Exceeded',
+                'not_configured': 'Not Configured',
+                'error': 'Error',
+                'unknown': 'Unknown'
+            }[apiKeyStatus] || 'Unknown';
+            
+            apiKeyStatusEl.className = 'status-badge ' + {
+                'valid': 'status-enabled',
+                'invalid': 'status-disabled',
+                'quota_exceeded': 'status-disabled',
+                'not_configured': 'status-disabled',
+                'error': 'status-disabled',
+                'unknown': 'status-disabled'
+            }[apiKeyStatus] || 'status-disabled';
+            
+            // Connectivity Status
+            const connectivityStatusEl = document.getElementById('connectivity-status');
+            const connectivityStatus = account.connectivity?.status || 'unknown';
+            
+            connectivityStatusEl.textContent = {
+                'connected': 'Connected',
+                'error': 'Error',
+                'unknown': 'Unknown'
+            }[connectivityStatus] || 'Unknown';
+            
+            connectivityStatusEl.className = 'status-badge ' + {
+                'connected': 'status-enabled',
+                'error': 'status-disabled',
+                'unknown': 'status-disabled'
+            }[connectivityStatus] || 'status-disabled';
+            
+            // Response Time
+            const responseTimeItem = document.getElementById('response-time-item');
+            const responseTimeEl = document.getElementById('response-time');
+            
+            if (account.connectivity?.response_time_ms !== null && account.connectivity?.response_time_ms !== undefined) {
+                responseTimeItem.style.display = 'flex';
+                responseTimeEl.textContent = `${account.connectivity.response_time_ms}ms`;
+            } else {
+                responseTimeItem.style.display = 'none';
+            }
+        }
+
         function refreshSettings() {
             // Show loading state
             const elements = ['backend-version', 'database-path', 'total-bots'];
@@ -365,12 +441,42 @@
                 if (el) el.textContent = 'Loading...';
             });
             
-            // Reload settings
+            // Reload settings and status bar
             loadSettings();
+            updateStatusBar();
         }
 
         // Load settings when page loads
         document.addEventListener('DOMContentLoaded', loadSettings);
+        
+        // Update status bar when account status changes
+        async function updateStatusBar() {
+            if (window.statusBar) {
+                await window.statusBar.refresh();
+            }
+        }
     </script>
+    
+    <script src="/static/status-bar.js"></script>
+
+    <!-- Status Bar -->
+    <div class="status-bar" id="status-bar">
+        <div class="status-item">
+            <i class="fas fa-key"></i>
+            <span id="status-api-key">API: Loading...</span>
+        </div>
+        <div class="status-item">
+            <i class="fas fa-wifi"></i>
+            <span id="status-connectivity">Connection: Loading...</span>
+        </div>
+        <div class="status-item">
+            <i class="fas fa-database"></i>
+            <span id="status-storage">Storage: Loading...</span>
+        </div>
+        <div class="status-item status-timestamp">
+            <i class="fas fa-clock"></i>
+            <span id="status-last-update">Never</span>
+        </div>
+    </div>
 </body>
 </html> 
