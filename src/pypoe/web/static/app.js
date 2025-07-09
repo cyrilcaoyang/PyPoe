@@ -4,10 +4,14 @@ class PyPoeApp {
         this.websocket = null;
         this.conversations = [];
         this.stats = {};
+        this.currentConversation = null;
         
         this.initializeElements();
         this.bindEvents();
         this.loadInitialData();
+        
+        // Initialize mode description
+        this.updateChatMode();
     }
     
     initializeElements() {
@@ -57,11 +61,17 @@ class PyPoeApp {
         
         // Global header functionality
         if (this.globalChatMode) {
-            this.globalChatMode.addEventListener('change', () => this.updateChatMode());
+            this.globalChatMode.addEventListener('change', () => {
+                this.updateChatMode();
+                this.updateLockingLogic();
+            });
         }
         
         if (this.globalBotSelect) {
-            this.globalBotSelect.addEventListener('change', () => this.updateSelectedBot());
+            this.globalBotSelect.addEventListener('change', () => {
+                this.updateSelectedBot();
+                this.updateLockingLogic();
+            });
         }
         
         // Auto-resize textarea
@@ -93,10 +103,8 @@ class PyPoeApp {
             await this.loadStats();
             this.populateBotFilter();
             
-            // Unlock bot selector when no active conversation
-            if (!this.currentConversationId) {
-                this.lockBotSelector(false);
-            }
+            // Update locking logic for initial state
+            this.updateLockingLogic();
         } catch (error) {
             console.error('Error loading initial data:', error);
         }
@@ -162,15 +170,19 @@ class PyPoeApp {
         // Load conversation details
         const conv = this.conversations.find(c => c.id === conversationId);
         if (conv) {
+            this.currentConversation = conv;
             this.currentChatTitle.textContent = conv.title;
-            this.currentBotName.textContent = `Bot: ${conv.bot_name}`;
+            this.currentBotName.textContent = `Bot: ${conv.bot_name} | Mode: ${conv.chat_mode || 'chatbot'}`;
             if (this.globalBotSelect) {
                 this.globalBotSelect.value = conv.bot_name;
             }
+            if (this.globalChatMode && conv.chat_mode) {
+                this.globalChatMode.value = conv.chat_mode;
+            }
         }
         
-        // Lock bot selector when conversation is active
-        this.lockBotSelector(true);
+        // Update locking logic based on new state
+        this.updateLockingLogic();
         
         // Load messages
         await this.loadConversationMessages(conversationId);
@@ -193,20 +205,10 @@ class PyPoeApp {
             
             // Add messages without individual scrolling
             messages.forEach(msg => {
-                const messageDiv = document.createElement('div');
-                messageDiv.className = `message ${msg.role}`;
-                
-                const avatar = document.createElement('div');
-                avatar.className = 'message-avatar';
-                avatar.innerHTML = msg.role === 'user' ? '<i class="fas fa-user"></i>' : '<i class="fas fa-robot"></i>';
-                
-                const contentDiv = document.createElement('div');
-                contentDiv.className = 'message-content';
-                contentDiv.textContent = msg.content;
-                
-                messageDiv.appendChild(avatar);
-                messageDiv.appendChild(contentDiv);
-                this.messagesContainer.appendChild(messageDiv);
+                this.addMessageToDOM(msg.content, msg.role, false, {
+                    bot_name: msg.bot_name,
+                    timestamp: msg.timestamp
+                });
             });
             
             // Scroll to bottom once after all messages are loaded
@@ -263,13 +265,16 @@ class PyPoeApp {
         }
     }
     
-    addMessage(content, role, streaming = false) {
+    addMessageToDOM(content, role, streaming = false, metadata = {}) {
         const messageDiv = document.createElement('div');
         messageDiv.className = `message ${role}`;
         
         const avatar = document.createElement('div');
         avatar.className = 'message-avatar';
         avatar.innerHTML = role === 'user' ? '<i class="fas fa-user"></i>' : '<i class="fas fa-robot"></i>';
+        
+        const contentWrapper = document.createElement('div');
+        contentWrapper.className = 'message-wrapper';
         
         const contentDiv = document.createElement('div');
         contentDiv.className = 'message-content';
@@ -287,17 +292,63 @@ class PyPoeApp {
             contentDiv.appendChild(typingIndicator);
         }
         
+        contentWrapper.appendChild(contentDiv);
+        
+        // Add metadata for assistant messages
+        if (role === 'assistant' && (metadata.bot_name || metadata.timestamp)) {
+            const metadataDiv = document.createElement('div');
+            metadataDiv.className = 'message-metadata';
+            
+            const parts = [];
+            if (metadata.bot_name) {
+                parts.push(`<span class="bot-name"><i class="fas fa-robot"></i> ${this.escapeHtml(metadata.bot_name)}</span>`);
+            }
+            if (metadata.timestamp) {
+                const timeStr = this.formatTime(metadata.timestamp);
+                parts.push(`<span class="timestamp">${timeStr}</span>`);
+            }
+            
+            metadataDiv.innerHTML = parts.join(' • ');
+            contentWrapper.appendChild(metadataDiv);
+        }
+        
+        // Add timestamp for user messages
+        if (role === 'user' && metadata.timestamp) {
+            const metadataDiv = document.createElement('div');
+            metadataDiv.className = 'message-metadata user-metadata';
+            metadataDiv.innerHTML = `<span class="timestamp">${this.formatTime(metadata.timestamp)}</span>`;
+            contentWrapper.appendChild(metadataDiv);
+        }
+        
         messageDiv.appendChild(avatar);
-        messageDiv.appendChild(contentDiv);
+        messageDiv.appendChild(contentWrapper);
         
         this.messagesContainer.appendChild(messageDiv);
         
         // Force layout recalculation and scroll after DOM update
-        requestAnimationFrame(() => {
-            this.scrollToBottom();
-        });
+        if (!streaming) {
+            requestAnimationFrame(() => {
+                this.scrollToBottom();
+            });
+        }
         
         return messageDiv;
+    }
+
+    // Backward compatibility method
+    addMessage(content, role, streaming = false) {
+        return this.addMessageToDOM(content, role, streaming, {
+            bot_name: role === 'assistant' ? (this.currentConversation?.bot_name || this.globalBotSelect?.value) : null,
+            timestamp: new Date().toISOString()
+        });
+    }
+
+    formatTime(timestamp) {
+        const date = new Date(timestamp);
+        return date.toLocaleTimeString([], { 
+            hour: '2-digit', 
+            minute: '2-digit' 
+        });
     }
     
     async sendMessage() {
@@ -318,19 +369,19 @@ class PyPoeApp {
         this.autoResizeTextarea();
     }
 
-    lockBotSelector(lock = true) {
+    lockBotSelector(lock = true, reason = '') {
         if (this.globalBotSelect) {
             this.globalBotSelect.disabled = lock;
             
             // Update label to show lock status
-            const botLabel = document.querySelector('.bot-selector label');
+            const botLabel = document.querySelector('.bot-controls label');
             
             // Add visual styling
             if (lock) {
                 this.globalBotSelect.classList.add('locked');
-                this.globalBotSelect.title = 'Bot is locked for this conversation. Create a new chat to select a different bot.';
+                this.globalBotSelect.title = reason || 'Bot selection is locked';
                 if (botLabel) {
-                    botLabel.innerHTML = 'Bot: <i class="fas fa-lock" style="color: #e74c3c; margin-left: 4px;" title="Locked for this conversation"></i>';
+                    botLabel.innerHTML = 'Bot: <i class="fas fa-lock" style="color: #e74c3c; margin-left: 4px;" title="' + (reason || 'Locked') + '"></i>';
                 }
             } else {
                 this.globalBotSelect.classList.remove('locked');
@@ -339,6 +390,53 @@ class PyPoeApp {
                     botLabel.textContent = 'Bot:';
                 }
             }
+        }
+    }
+
+    lockChatMode(lock = true, reason = '') {
+        if (this.globalChatMode) {
+            this.globalChatMode.disabled = lock;
+            
+            // Update label to show lock status
+            const modeLabel = document.querySelector('.mode-controls label');
+            
+            // Add visual styling
+            if (lock) {
+                this.globalChatMode.classList.add('locked');
+                this.globalChatMode.title = reason || 'Chat mode selection is locked';
+                if (modeLabel) {
+                    modeLabel.innerHTML = 'Mode: <i class="fas fa-lock" style="color: #e74c3c; margin-left: 4px;" title="' + (reason || 'Locked') + '"></i>';
+                }
+            } else {
+                this.globalChatMode.classList.remove('locked');
+                this.globalChatMode.title = 'Select chat mode';
+                if (modeLabel) {
+                    modeLabel.textContent = 'Mode:';
+                }
+            }
+        }
+    }
+
+    updateLockingLogic() {
+        const chatMode = this.globalChatMode ? this.globalChatMode.value : 'chatbot';
+        
+        // Chat mode locking: lock when no conversation is selected
+        if (!this.currentConversationId) {
+            this.lockChatMode(true, 'Select a conversation first');
+        } else {
+            this.lockChatMode(false);
+        }
+        
+        // Bot locking logic based on frontend rules
+        if (!this.currentConversationId) {
+            // No conversation selected
+            this.lockBotSelector(true, 'Select a conversation first');
+        } else if (chatMode === 'chatbot' && this.currentConversation) {
+            // Chatbot mode with active conversation
+            this.lockBotSelector(true, 'Bot locked in single chat mode');
+        } else {
+            // Other modes or no active conversation
+            this.lockBotSelector(false);
         }
     }
 
@@ -450,6 +548,7 @@ class PyPoeApp {
                 // Clear chat if this was the active conversation
                 if (this.currentConversationId === conversationId) {
                     this.currentConversationId = null;
+                    this.currentConversation = null;
                     this.messagesContainer.innerHTML = `
                         <div class="welcome-message">
                             <i class="fas fa-robot fa-3x"></i>
@@ -465,8 +564,8 @@ class PyPoeApp {
                     this.messageInput.disabled = true;
                     this.sendBtn.disabled = true;
                     
-                    // Unlock bot selector when no conversation is active
-                    this.lockBotSelector(false);
+                    // Update locking logic for no active conversation
+                    this.updateLockingLogic();
                     
                     // Re-bind welcome button event
                     const welcomeNewChatBtn = document.getElementById('welcome-new-chat-btn');
@@ -484,6 +583,17 @@ class PyPoeApp {
         // Update UI or behavior based on chat mode
         const selectedMode = this.globalChatMode.value;
         console.log('Chat mode changed to:', selectedMode);
+        
+        // Update mode description
+        const modeDescription = document.getElementById('mode-description');
+        if (modeDescription) {
+            const descriptions = {
+                'chatbot': 'Single AI assistant',
+                'group': 'Multiple AI assistants',
+                'debate': 'Two AIs debate a topic'
+            };
+            modeDescription.textContent = descriptions[selectedMode] || 'Unknown mode';
+        }
         
         // Update current bot name display to reflect the selected mode
         if (!this.currentConversationId) {

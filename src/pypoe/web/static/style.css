@@ -264,17 +264,59 @@ body {
 
 .mode-selector {
     display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.mode-controls {
+    display: flex;
     align-items: center;
     gap: 8px;
 }
 
-.mode-selector label {
+.mode-description {
+    font-size: 0.75rem;
+    color: #7f8c8d;
+    font-style: italic;
+    padding: 2px 0;
+    transition: color 0.3s ease;
+    min-height: 16px;
+}
+
+/* Enhanced hover effects for better UX */
+.mode-controls select:not(:disabled):hover {
+    border-color: #3498db;
+    box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.1);
+}
+
+.bot-controls select:not(:disabled):hover {
+    border-color: #3498db;
+    box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.1);
+}
+
+/* Improve message transitions */
+.message {
+    animation: fadeInUp 0.3s ease-out;
+}
+
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.mode-controls label {
     font-weight: 500;
     color: #5a6c7d;
     font-size: 0.9rem;
 }
 
-.mode-selector select {
+.mode-controls select {
     padding: 6px 12px;
     border: 2px solid #bdc3c7;
     border-radius: 6px;
@@ -285,19 +327,29 @@ body {
     transition: all 0.3s ease;
 }
 
-.mode-selector select:focus {
+.mode-controls select:focus {
     outline: none;
     border-color: #3498db;
     box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
 }
 
-.mode-selector select:disabled,
-.mode-selector select.locked {
+.mode-controls select:disabled,
+.mode-controls select.locked {
     background: #f8f9fa;
     color: #6c757d;
     border-color: #dee2e6;
     cursor: not-allowed;
     opacity: 0.7;
+    position: relative;
+}
+
+.mode-controls select.locked {
+    border-color: #e74c3c;
+    background: #fdf2f2;
+}
+
+.mode-controls label:has(+ select.locked) {
+    color: #e74c3c;
 }
 
 .header-right {
@@ -342,16 +394,27 @@ body {
 
 .bot-selector {
     display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.bot-controls {
+    display: flex;
     align-items: center;
     gap: 10px;
 }
 
-.bot-selector label {
+.bot-description {
+    min-height: 16px;
+    padding: 2px 0;
+}
+
+.bot-controls label {
     font-weight: 600;
     color: #2c3e50;
 }
 
-.bot-selector select {
+.bot-controls select {
     padding: 8px 12px;
     border: 1px solid #bdc3c7;
     border-radius: 6px;
@@ -360,8 +423,8 @@ body {
     transition: all 0.3s ease;
 }
 
-.bot-selector select:disabled,
-.bot-selector select.locked {
+.bot-controls select:disabled,
+.bot-controls select.locked {
     background: #f8f9fa;
     color: #6c757d;
     border-color: #dee2e6;
@@ -369,8 +432,13 @@ body {
     opacity: 0.7;
 }
 
-.bot-selector select.locked::after {
-    content: " 🔒";
+.bot-controls select.locked {
+    border-color: #e74c3c;
+    background: #fdf2f2;
+}
+
+.bot-controls label:has(+ select.locked) {
+    color: #e74c3c;
 }
 
 .chat-controls {
@@ -475,7 +543,6 @@ body {
 }
 
 .message-content {
-    max-width: 70%;
     padding: 12px 16px;
     border-radius: 18px;
     word-wrap: break-word;
@@ -485,13 +552,11 @@ body {
 .message.user .message-content {
     background: #3498db;
     color: white;
-    margin-left: 20px;
 }
 
 .message.assistant .message-content {
     background: white;
     border: 1px solid #ecf0f1;
-    margin-right: 20px;
 }
 
 .message-avatar {
@@ -514,6 +579,49 @@ body {
 .message.assistant .message-avatar {
     background: #e74c3c;
     color: white;
+}
+
+/* Message wrapper for metadata */
+.message-wrapper {
+    max-width: 70%;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.message.user .message-wrapper {
+    align-items: flex-end;
+}
+
+/* Message metadata styling */
+.message-metadata {
+    font-size: 0.75rem;
+    color: #7f8c8d;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 4px;
+    padding: 0 4px;
+}
+
+.message-metadata.user-metadata {
+    justify-content: flex-end;
+    margin-top: 2px;
+}
+
+.message-metadata .bot-name {
+    color: #3498db;
+    font-weight: 500;
+}
+
+.message-metadata .bot-name i {
+    margin-right: 4px;
+    font-size: 0.7rem;
+}
+
+.message-metadata .timestamp {
+    color: #95a5a6;
+    font-size: 0.7rem;
 }
 
 .typing-indicator {

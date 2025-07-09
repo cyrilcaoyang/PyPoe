@@ -69,22 +69,32 @@
                         <span class="app-title">PyPoe Chat</span>
                     </div>
                     <div class="mode-selector">
-                        <label for="global-chat-mode">Mode:</label>
-                        <select id="global-chat-mode">
-                            <option value="chatbot">Chat Bot - Single AI assistant</option>
-                            <option value="group">Group Chat - Multiple AI assistants</option>
-                            <option value="debate">AI Debate - Two AIs debate a topic</option>
-                        </select>
+                        <div class="mode-description" id="mode-description">
+                            Single AI assistant
+                        </div>
+                        <div class="mode-controls">
+                            <label for="global-chat-mode">Mode:</label>
+                            <select id="global-chat-mode">
+                                <option value="chatbot">Chat Bot</option>
+                                <option value="group">Group Chat</option>
+                                <option value="debate">AI Debate</option>
+                            </select>
+                        </div>
                     </div>
                 </div>
                 <div class="header-right">
                     <div class="bot-selector">
-                        <label for="global-bot-select">Bot:</label>
-                        <select id="global-bot-select">
-                            {% for bot in available_bots %}
-                            <option value="{{ bot }}">{{ bot }}</option>
-                            {% endfor %}
-                        </select>
+                        <div class="bot-description">
+                            <!-- Placeholder for alignment -->
+                        </div>
+                        <div class="bot-controls">
+                            <label for="global-bot-select">Bot:</label>
+                            <select id="global-bot-select">
+                                {% for bot in available_bots %}
+                                <option value="{{ bot }}">{{ bot }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
                     </div>
                     <div class="header-actions">
                         <button class="btn btn-secondary" onclick="app.scrollChatToTop()" title="Go to first message (Home key)">
