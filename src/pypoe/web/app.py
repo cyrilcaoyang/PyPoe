@@ -207,6 +207,19 @@ class WebApp:
                 )
             except Exception as e:
                 return HTMLResponse(f"Error loading settings: {str(e)}", status_code=500)
+
+        @self.app.get("/storage", response_class=HTMLResponse, dependencies=dependencies)
+        async def storage_management(request: Request):
+            """Storage monitoring and management page."""
+            try:
+                return self.templates.TemplateResponse(
+                    "storage.html",
+                    {
+                        "request": request
+                    }
+                )
+            except Exception as e:
+                return HTMLResponse(f"Error loading storage management: {str(e)}", status_code=500)
         
         @self.app.post("/api/conversation/new", dependencies=dependencies)
         async def create_conversation(conversation_data: ConversationCreate):
@@ -256,10 +269,167 @@ class WebApp:
         
         @self.app.delete("/api/conversation/{conversation_id}", dependencies=dependencies)
         async def delete_conversation(conversation_id: str):
-            """Delete a conversation."""
+            """Delete a conversation with enhanced media cleanup tracking."""
             try:
+                # Check if enhanced history is available for media tracking
+                media_cleanup_info = {"enhanced_storage": False, "media_files_deleted": 0}
+                
+                if hasattr(self.client.history, 'get_media_stats'):
+                    # Enhanced storage available - get media stats before deletion
+                    stats_before = await self.client.history.get_media_stats()
+                    media_cleanup_info["enhanced_storage"] = True
+                    media_cleanup_info["stats_before"] = stats_before
+                
+                # Delete the conversation
                 await self.client.delete_conversation(conversation_id)
-                return JSONResponse({"success": True})
+                
+                if media_cleanup_info["enhanced_storage"]:
+                    # Get stats after deletion to calculate cleanup
+                    stats_after = await self.client.history.get_media_stats()
+                    media_cleanup_info["stats_after"] = stats_after
+                    media_cleanup_info["media_files_deleted"] = (
+                        stats_before.get('total_files', 0) - stats_after.get('total_files', 0)
+                    )
+                    media_cleanup_info["storage_freed_mb"] = (
+                        (stats_before.get('total_size_bytes', 0) - stats_after.get('total_size_bytes', 0)) 
+                        / 1024 / 1024
+                    )
+                
+                return JSONResponse({
+                    "success": True,
+                    "message": "Conversation deleted successfully",
+                    "media_cleanup": media_cleanup_info
+                })
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=str(e))
+        
+        @self.app.get("/api/storage/stats", dependencies=dependencies)
+        async def get_storage_stats():
+            """Get comprehensive storage statistics."""
+            try:
+                # Basic conversation stats (always available)
+                conversations = await self.client.get_conversations()
+                total_conversations = len(conversations)
+                
+                basic_stats = {
+                    "total_conversations": total_conversations,
+                    "database_path": str(self.config.database_path),
+                    "enhanced_storage_available": hasattr(self.client.history, 'get_media_stats')
+                }
+                
+                # Enhanced storage stats (if available)
+                if hasattr(self.client.history, 'get_media_stats'):
+                    media_stats = await self.client.history.get_media_stats()
+                    
+                    # Calculate database size
+                    import os
+                    db_size = 0
+                    if os.path.exists(self.config.database_path):
+                        db_size = os.path.getsize(self.config.database_path)
+                    
+                    # Get media directory info
+                    media_dir_size = 0
+                    media_dir_path = "N/A"
+                    if hasattr(self.client.history, 'media_dir'):
+                        media_dir_path = str(self.client.history.media_dir)
+                        if os.path.exists(media_dir_path):
+                            media_dir_size = sum(
+                                os.path.getsize(os.path.join(dirpath, filename))
+                                for dirpath, dirnames, filenames in os.walk(media_dir_path)
+                                for filename in filenames
+                            )
+                    
+                    enhanced_stats = {
+                        "media_files": {
+                            "total_files": media_stats.get('total_files', 0),
+                            "total_size_bytes": media_stats.get('total_size_bytes', 0),
+                            "total_size_mb": media_stats.get('total_size_bytes', 0) / 1024 / 1024,
+                            "by_type": media_stats.get('by_type', {})
+                        },
+                        "storage_locations": {
+                            "database": {
+                                "path": str(self.config.database_path),
+                                "size_bytes": db_size,
+                                "size_mb": db_size / 1024 / 1024
+                            },
+                            "media_directory": {
+                                "path": media_dir_path,
+                                "size_bytes": media_dir_size,
+                                "size_mb": media_dir_size / 1024 / 1024
+                            }
+                        },
+                        "total_storage": {
+                            "size_bytes": db_size + media_dir_size,
+                            "size_mb": (db_size + media_dir_size) / 1024 / 1024
+                        }
+                    }
+                    
+                    return JSONResponse({**basic_stats, **enhanced_stats})
+                
+                return JSONResponse(basic_stats)
+                
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=str(e))
+        
+        @self.app.post("/api/storage/cleanup", dependencies=dependencies)
+        async def cleanup_orphaned_media():
+            """Clean up orphaned media files."""
+            try:
+                if not hasattr(self.client.history, 'cleanup_orphaned_media'):
+                    return JSONResponse({
+                        "success": False,
+                        "message": "Enhanced storage not available",
+                        "files_cleaned": 0
+                    })
+                
+                # Get stats before cleanup
+                stats_before = await self.client.history.get_media_stats()
+                
+                # Run cleanup
+                await self.client.history.cleanup_orphaned_media()
+                
+                # Get stats after cleanup
+                stats_after = await self.client.history.get_media_stats()
+                
+                files_cleaned = stats_before.get('total_files', 0) - stats_after.get('total_files', 0)
+                storage_freed = (stats_before.get('total_size_bytes', 0) - stats_after.get('total_size_bytes', 0)) / 1024 / 1024
+                
+                return JSONResponse({
+                    "success": True,
+                    "message": f"Cleaned up {files_cleaned} orphaned files",
+                    "files_cleaned": files_cleaned,
+                    "storage_freed_mb": storage_freed,
+                    "stats_before": stats_before,
+                    "stats_after": stats_after
+                })
+                
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=str(e))
+        
+        @self.app.get("/api/storage/conversations", dependencies=dependencies)
+        async def get_conversations_with_storage_info():
+            """Get conversations with enhanced storage information."""
+            try:
+                conversations = await self.client.get_conversations()
+                
+                # If enhanced storage is available, add media info
+                if hasattr(self.client.history, 'get_conversations'):
+                    enhanced_conversations = await self.client.history.get_conversations()
+                    
+                    # Create a lookup for enhanced data
+                    enhanced_lookup = {conv['id']: conv for conv in enhanced_conversations}
+                    
+                    # Enhance the conversation data
+                    for conv in conversations:
+                        enhanced_data = enhanced_lookup.get(conv['id'], {})
+                        conv.update({
+                            'media_count': enhanced_data.get('media_count', 0),
+                            'has_media': enhanced_data.get('has_media', False),
+                            'message_count': enhanced_data.get('message_count', 0)
+                        })
+                
+                return JSONResponse(conversations)
+                
             except Exception as e:
                 raise HTTPException(status_code=500, detail=str(e))
         
@@ -818,6 +988,9 @@ class WebApp:
                         "/api/conversations/search",  # Advanced search with filtering/sorting
                         "/api/bots",  # Enhanced with conversation-specific locking
                         "/api/stats",  # Comprehensive statistics
+                        "/api/storage/stats",  # Storage monitoring and analytics
+                        "/api/storage/cleanup",  # Media cleanup operations
+                        "/api/storage/conversations",  # Conversations with storage info
                         "/api/network-status",  # Dynamic network interface detection
                         "/api/logs/network",  # Network activity logs
                         "/api/logs/system",  # System activity logs

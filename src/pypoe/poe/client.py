@@ -62,6 +62,9 @@ class PoeChatClient:
         """
         Send a message to a Poe bot and stream the response.
         
+        If conversation_id is provided, automatically retrieves and includes
+        conversation history to maintain context continuity.
+        
         Args:
             message: The message to send
             bot_name: The bot to send the message to (default: GPT-3.5-Turbo)
@@ -77,6 +80,62 @@ class PoeChatClient:
         """
         await self._ensure_history_initialized()
         
+        # If conversation_id is provided and history is enabled, include conversation context
+        if conversation_id and self.enable_history:
+            try:
+                # Retrieve existing conversation history
+                existing_messages = await self.get_conversation_messages(conversation_id)
+                
+                # Convert to the format expected by send_conversation
+                conversation_messages = []
+                for msg in existing_messages:
+                    conversation_messages.append({
+                        'role': msg['role'],
+                        'content': msg['content']
+                    })
+                
+                # Add the new user message
+                conversation_messages.append({
+                    'role': 'user',
+                    'content': message
+                })
+                
+                # Save the new user message to history manually
+                if save_history:
+                    await self.history.add_message(
+                        conversation_id=conversation_id,
+                        role="user",
+                        content=message
+                    )
+                
+                # Use send_conversation for full context but don't save history 
+                # (to avoid duplicating existing messages)
+                full_response = ""
+                async for partial in self.send_conversation(
+                    messages=conversation_messages,
+                    bot_name=bot_name,
+                    conversation_id=conversation_id,
+                    save_history=False  # Prevent duplicate history entries
+                ):
+                    full_response += partial
+                    yield partial
+                
+                # Save the bot response to history manually
+                if save_history and full_response:
+                    await self.history.add_message(
+                        conversation_id=conversation_id,
+                        role="assistant",
+                        content=full_response
+                    )
+                return
+                
+            except Exception as e:
+                # If conversation history retrieval fails, fall back to single message
+                # This ensures backward compatibility
+                print(f"Warning: Failed to retrieve conversation history: {e}")
+                print("Falling back to single message mode...")
+        
+        # Original single-message logic for new conversations or when history is disabled
         # Create a new conversation if none provided and history is enabled
         if conversation_id is None and save_history and self.enable_history:
             conversation_id = await self.history.create_conversation(
@@ -244,12 +303,12 @@ class PoeChatClient:
     async def get_available_bots(self) -> List[str]:
         """
         Get a list of available bots.
-        Note: This list contains verified working bots as of January 2025.
+        Note: This list contains models available on Poe as of January 2025.
         Some bots may require special permissions or subscriptions.
         """
-        # Verified working bots on Poe as of January 2025
+        # Updated comprehensive list of Poe models as of January 2025
         return [
-            # OpenAI models (all working)
+            # === OpenAI Models (GPT Family) ===
             "GPT-3.5-Turbo",
             "GPT-4",
             "GPT-4o",
@@ -258,25 +317,74 @@ class PoeChatClient:
             "o1-mini",
             "o3-mini",
             "o4-mini",
+            "GPT-4-Turbo",
             
-            # Anthropic models (confirmed working)
+            # === Anthropic Models (Claude Family) ===
             "Claude-3-Opus",
             "Claude-3-Sonnet", 
             "Claude-3-Haiku",
             "Claude-3.5-Sonnet",
-            "Claude-3.7-Sonnet",
+            "Claude-3.5-Haiku",
+            "Claude-3.7-Sonnet",  # Latest as of Feb 2025
             
-            # Google models (confirmed working)
+            # === Google Models (Gemini Family) ===
             "Gemini-1.5-Pro",
+            "Gemini-1.5-Flash",
             "Gemini-2.0-Flash",
+            "Gemini-2.5-Pro",     # Latest as of March 2025
+            "Gemini-2.5-Flash",
             
-            # Meta models (may work - not all tested)
+            # === Meta Models (Llama Family) ===
             "Llama-3-70B-Instruct",
+            "Llama-3.1-70B-Instruct",
+            "Llama-3.1-405B-Instruct",
+            "Llama-3.2-90B-Vision-Instruct",
+            "Llama-3.3-70B-Instruct",
             
-            # Other models (may work)
+            # === DeepSeek Models (Open Source) ===
             "DeepSeek-R1",
+            "DeepSeek-V3",
+            
+            # === xAI Models ===
+            "Grok-2",
+            "Grok-3-Beta",
+            
+            # === Mistral AI Models ===
             "Mistral-7B-Instruct",
-            "Mixtral-8x7B-Instruct",
+            "Mistral-8x7B-Instruct",
+            "Mistral-Large",
+            "Mistral-Large-2",
+            
+            # === Cohere Models ===
+            "Command-R",
+            "Command-R-Plus",
+            
+            # === Amazon Models ===
+            "Amazon-Nova-Micro",
+            "Amazon-Nova-Lite",
+            "Amazon-Nova-Pro",
+            
+            # === Other Notable Models ===
+            "Llama-3.1-Nemotron-70B-Instruct",
+            "Gemma-2-27B",
+            "Gemma-2-9B",
+            
+            # === Image Generation Models ===
+            "DALL-E-3",
+            "FLUX.1-schnell",
+            "FLUX.1-dev",
+            "Stable-Diffusion-XL",
+            "Imagen-3",
+            "Imagen-3-Fast",
+            
+            # === Video Generation Models ===
+            "Runway-Gen-3",
+            "Veo-2",
+            "Kling-Pro-v1.5",
+            
+            # === Specialized Models ===
+            "Web-Search-GPT",    # GPT with web search
+            "Assistant",         # Poe's default assistant
         ]
 
     async def get_conversations(self) -> List[Dict[str, Any]]:
