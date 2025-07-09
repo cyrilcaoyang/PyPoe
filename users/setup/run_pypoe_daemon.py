@@ -164,6 +164,15 @@ def start_daemon():
     
     print(f"📁 Working directory: {cwd}")
     
+    # Load environment from .env file in the project root
+    from dotenv import load_dotenv
+    env_file = cwd / ".env"
+    if env_file.exists():
+        print(f"🔧 Loading environment from: {env_file}")
+        load_dotenv(env_file)
+    else:
+        print(f"⚠️  No .env file found at: {env_file}")
+    
     # Create log files
     LOG_FILE.touch()
     ERROR_LOG_FILE.touch()
@@ -178,6 +187,8 @@ def start_daemon():
         print("   Get your API key from: https://poe.com/api_key")
         print(f"   Place it in a .env file in: {cwd}")
         print()
+    else:
+        print("✅ POE_API_KEY found in environment")
     
     # Start the process in background
     try:
@@ -193,6 +204,7 @@ def start_daemon():
                 'stdout': log_file,
                 'stderr': error_file,
                 'stdin': subprocess.DEVNULL,
+                'env': os.environ.copy(),  # Explicitly pass the current environment
             }
             
             # Add process group creation for Unix systems
