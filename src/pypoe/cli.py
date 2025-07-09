@@ -289,6 +289,28 @@ def status():
 @click.option('--web-password', envvar='PYPOE_WEB_PASSWORD', help='Password for web UI basic auth. Can be set with PYPOE_WEB_PASSWORD env var.')
 def web(host, port, web_username, web_password):
     """Start the PyPoe web interface"""
+    # Ensure environment is loaded before getting config
+    from pathlib import Path
+    from dotenv import load_dotenv
+    
+    # Try to find and load .env file from multiple locations
+    possible_env_paths = [
+        Path.cwd() / ".env",  # Current directory
+        Path(__file__).parent.parent.parent / ".env",  # Project root
+        Path.home() / ".pypoe" / ".env",  # User directory
+    ]
+    
+    env_loaded = False
+    for env_path in possible_env_paths:
+        if env_path.exists():
+            click.echo(f"🔧 Loading environment from: {env_path}")
+            load_dotenv(env_path)
+            env_loaded = True
+            break
+    
+    if not env_loaded:
+        click.echo("⚠️  No .env file found, using environment variables only")
+    
     config = get_config()
     if web_username:
         config.web_username = web_username
