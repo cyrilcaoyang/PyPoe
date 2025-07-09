@@ -18,11 +18,18 @@ def _create_history_manager():
     """Create a HistoryManager with proper parameters for enhanced features."""
     config = get_config()
     from pathlib import Path
-    media_dir = Path(config.database_path).parent / "media"
-    return HistoryManager(
-        db_path=str(config.database_path),
-        media_dir=str(media_dir)
-    )
+    
+    # Check if we're using EnhancedHistoryManager or basic HistoryManager
+    if hasattr(HistoryManager, '__module__') and 'enhanced_history' in HistoryManager.__module__:
+        # Using EnhancedHistoryManager - pass media_dir
+        media_dir = Path(config.database_path).parent / "media"
+        return HistoryManager(
+            db_path=str(config.database_path),
+            media_dir=str(media_dir)
+        )
+    else:
+        # Using basic HistoryManager - only pass db_path
+        return HistoryManager(db_path=str(config.database_path))
 
 # Import history manager from core package
 try:
@@ -256,6 +263,22 @@ def status():
     """Show PyPoe status and configuration"""
     click.echo("PyPoe Status")
     click.echo("=" * 20)
+    
+    # Load environment before checking API key
+    from pathlib import Path
+    from dotenv import load_dotenv
+    
+    # Try to find and load .env file from multiple locations
+    possible_env_paths = [
+        Path.cwd() / ".env",  # Current directory
+        Path(__file__).parent.parent.parent / ".env",  # Project root
+        Path.home() / ".pypoe" / ".env",  # User directory
+    ]
+    
+    for env_path in possible_env_paths:
+        if env_path.exists():
+            load_dotenv(env_path)
+            break
     
     # Check API key
     api_key = os.getenv('POE_API_KEY')
