@@ -63,7 +63,7 @@ Simple guide for setting up the PyPoe Slack bot for local development and testin
 Create environment file:
 ```bash
 # Copy template and edit
-cp users/pypoe.env.example .env
+cp pypoe.env.example .env
 ```
 
 Edit `.env` with your values:

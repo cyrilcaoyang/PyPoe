@@ -50,7 +50,7 @@ def main():
     
     # Import and start the web server
     try:
-        from pypoe.web.runner import main as web_main
+        from pypoe.interfaces.web.runner import main as web_main
         web_main()
     except ImportError as e:
         print(f"❌ Could not import web runner: {e}")

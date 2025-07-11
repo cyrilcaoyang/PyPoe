@@ -94,7 +94,7 @@ pip install -e ".[dev]"
 ### 2. Configure PyPoe
 Create a `.env` file in the project root:
 ```bash
-cp users/pypoe.env.example .env
+cp pypoe.env.example .env
 ```
 
 Edit `.env` and add your API key:
@@ -177,6 +177,27 @@ pypoe web --host 100.XX.XX.XX --web-username admin --web-password secret
 pypoe web --port 3000
 ```
 
+### Daemon Management (Background Services)
+```bash
+# Start web server as background daemon
+pypoe daemon start
+
+# Start with custom host/port
+pypoe daemon start --host 0.0.0.0 --port 8001
+
+# Check daemon status
+pypoe daemon status
+
+# View daemon logs
+pypoe daemon logs
+
+# Stop the daemon
+pypoe daemon stop
+
+# Restart the daemon
+pypoe daemon restart
+```
+
 ### Slack Bot
 ```bash
 # Start Slack bot (requires Slack app configuration)
@@ -195,34 +216,55 @@ PyPoe services can run in the background, allowing you to access them even after
 
 ### 🌐 Web Interface Background Service
 
-#### Method 1: Python Daemon Script (Recommended)
+#### Method 1: PyPoe Daemon Commands (Recommended)
 The easiest way to run PyPoe web server as a persistent daemon:
 
 ```bash
 # Start the daemon
-python users/setup/run_pypoe_daemon.py start
+pypoe daemon start
+
+# Start with custom configuration
+pypoe daemon start --host 0.0.0.0 --port 8001
 
 # Check status
-python users/setup/run_pypoe_daemon.py status
+pypoe daemon status
 
 # View real-time logs
-python users/setup/run_pypoe_daemon.py logs
+pypoe daemon logs
 
 # Stop the daemon
-python users/setup/run_pypoe_daemon.py stop
+pypoe daemon stop
 
 # Restart the daemon
-python users/setup/run_pypoe_daemon.py restart
+pypoe daemon restart
 ```
 
 **Features:**
 - ✅ Survives SSH logout and terminal closure
 - ✅ Automatic logging to `~/.pypoe-web.log`
 - ✅ Process management and error handling
-- ✅ Tailscale IP detection and display
+- ✅ Environment variable integration (PYPOE_HOST, PYPOE_PORT)
 - ✅ Works on macOS, Linux, and Windows
+- ✅ Built into the main CLI for easy access
 
-#### Method 2: Using nohup (Simple)
+#### Method 2: Legacy Python Script (Alternative)
+You can still use the original daemon script if preferred:
+
+```bash
+# Start the daemon
+python src/pypoe/scripts/setup/run_pypoe_daemon.py start
+
+# Check status
+python src/pypoe/scripts/setup/run_pypoe_daemon.py status
+
+# View logs
+python src/pypoe/scripts/setup/run_pypoe_daemon.py logs
+
+# Stop the daemon
+python src/pypoe/scripts/setup/run_pypoe_daemon.py stop
+```
+
+#### Method 3: Using nohup (Simple)
 For quick background execution:
 
 ```bash
@@ -239,12 +281,12 @@ pkill -f "pypoe web"
 tail -f ~/pypoe-web.log
 ```
 
-#### Method 3: Using systemd (Linux Production)
+#### Method 4: Using systemd (Linux Production)
 For production Linux servers:
 
 ```bash
 # Copy service file (adjust paths as needed)
-sudo cp users/setup/pypoe-web.service /etc/systemd/system/
+sudo cp src/pypoe/scripts/setup/pypoe-web.service /etc/systemd/system/
 
 # Edit paths in service file
 sudo nano /etc/systemd/system/pypoe-web.service
@@ -448,15 +490,17 @@ pytest tests/test_client.py -v
 ```
 pypoe/
 ├── src/pypoe/
-│   ├── cli.py          # Command line interface
-│   ├── config.py       # Configuration management
-│   ├── poe/            # Core Poe API client
-│   ├── web/            # Web interface (FastAPI)
-│   └── slack/          # Slack bot integration
-├── users/              # User examples and data
-│   ├── history/        # Shared conversation database
-│   └── setup/         # Setup utilities
-└── tests/             # Test suite
+│   ├── cli.py              # Command line interface
+│   ├── config.py           # Configuration management
+│   ├── core/               # Core Poe API client
+│   ├── interfaces/         # Web and Slack interfaces
+│   │   ├── web/           # Web interface (FastAPI)
+│   │   └── slack/         # Slack bot integration
+│   ├── scripts/           # User examples and setup utilities
+│   └── docs/              # Documentation files
+├── users/                 # User data and history
+│   └── history/          # Shared conversation database
+└── tests/                # Test suite
 ```
 
 ## 🔒 Security Notes

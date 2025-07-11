@@ -416,81 +416,63 @@ class PoeChatClient:
         # Updated comprehensive list of Poe models as of January 2025
         return [
             # === OpenAI Models (GPT Family) ===
-            "GPT-3.5-Turbo",
+            "GPT-4-Turbo",
             "GPT-4",
             "GPT-4o",
             "GPT-4o-mini",
-            "o1-preview",
-            "o1-mini",
-            "o3-mini",
             "o4-mini",
-            "GPT-4-Turbo",
             
             # === Anthropic Models (Claude Family) ===
-            "Claude-3-Opus",
-            "Claude-3-Sonnet", 
-            "Claude-3-Haiku",
-            "Claude-3.5-Sonnet",
-            "Claude-3.5-Haiku",
-            "Claude-3.7-Sonnet",  # Latest as of Feb 2025
+            "Claude-Opus-4-Search",
+            "Claude-Sonnet-4-Search",
+            "Claude-Opus-4-Reasoning",
+            "Claude-Sonnet-4-Reasoning",
             
             # === Google Models (Gemini Family) ===
-            "Gemini-1.5-Pro",
-            "Gemini-1.5-Flash",
-            "Gemini-2.0-Flash",
-            "Gemini-2.5-Pro",     # Latest as of March 2025
+            "Gemini-2.5-Pro",
             "Gemini-2.5-Flash",
             
             # === Meta Models (Llama Family) ===
-            "Llama-3-70B-Instruct",
-            "Llama-3.1-70B-Instruct",
-            "Llama-3.1-405B-Instruct",
-            "Llama-3.2-90B-Vision-Instruct",
-            "Llama-3.3-70B-Instruct",
+            "Llama-4-Maverick-B10",
+            "Llama-4-Scout-B10",
+            "Llama-3.3-70B",
             
             # === DeepSeek Models (Open Source) ===
             "DeepSeek-R1",
             "DeepSeek-V3",
             
             # === xAI Models ===
-            "Grok-2",
-            "Grok-3-Beta",
+            "Grok-4",
+            "Grok-3-mini",
             
-            # === Mistral AI Models ===
-            "Mistral-7B-Instruct",
-            "Mistral-8x7B-Instruct",
-            "Mistral-Large",
-            "Mistral-Large-2",
+            # === Alibaba Models ===
+            "Qwen-3-235B-T",
+            "Qwen3-235B-A22B-FW",
             
             # === Cohere Models ===
             "Command-R",
             "Command-R-Plus",
             
-            # === Amazon Models ===
-            "Amazon-Nova-Micro",
-            "Amazon-Nova-Lite",
-            "Amazon-Nova-Pro",
-            
-            # === Other Notable Models ===
-            "Llama-3.1-Nemotron-70B-Instruct",
-            "Gemma-2-27B",
-            "Gemma-2-9B",
-            
             # === Image Generation Models ===
             "DALL-E-3",
-            "FLUX.1-schnell",
-            "FLUX.1-dev",
-            "Stable-Diffusion-XL",
-            "Imagen-3",
-            "Imagen-3-Fast",
+            "FLUX-pro-1.1-ultra",
+            "FLUX-pro-1.1",
+            "StableDiffusionXL",
+            "StableDiffusion3.5-L",
+            "Imagen-4-Ultra-Exp", # Google DeepMind
+            "Imagen-4",
+            "Imagen-4-Fast",
+            "Seedream-3.0",    # ByteDance, a bilingual model
             
             # === Video Generation Models ===
-            "Runway-Gen-3",
-            "Veo-2",
-            "Kling-Pro-v1.5",
+            "Runway-Gen-4-Turbo",
+            "Veo-3",
+            "Sora",
+            "Kling-2.1-Pro",
+            "Kling-2.1-Master",
+            "Seedance-1.0-Lite",
             
             # === Specialized Models ===
-            "Web-Search-GPT",    # GPT with web search
             "Assistant",         # Poe's default assistant
         ]
 

@@ -21,7 +21,7 @@ users/
 ### 1. Set Up Environment
 ```bash
 # Copy the template
-cp users/pypoe.env.example .env
+cp pypoe.env.example .env
 
 # Edit with your API key
 # POE_API_KEY=your-api-key-here

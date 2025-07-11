@@ -1,21 +1,30 @@
 #!/usr/bin/env python3
 """
-Test script to verify chat scrolling functionality in the PyPoe web interface.
-This script starts the web server and opens the browser for manual testing.
+Test Chat Scrolling Functionality for PyPoe Web Interface
 """
 
 import sys
 import webbrowser
 import time
+import pytest
 from pathlib import Path
 
-# Add the src directory to Python path
-src_path = Path(__file__).parent.parent / 'src'
-sys.path.insert(0, str(src_path))
+# Get the root project directory
+project_root = Path(__file__).parent.parent.parent.parent
+sys.path.insert(0, str(project_root / "src"))
 
-from pypoe.web.runner import main
+from pypoe.interfaces.web.runner import main
 
+@pytest.mark.skip(reason="Manual integration test - starts web server")
 def test_chat_scrolling():
+    """
+    Manual integration test for chat scrolling functionality.
+    
+    This test starts a web server for manual testing and should not be run
+    during automated test runs. To run manually:
+    
+    pytest src/pypoe/tests/test_chat_scrolling.py::test_chat_scrolling -s
+    """
     print("🚀 Starting PyPoe web interface...")
     print("📝 Testing chat scrolling functionality:")
     print("   - Auto-scroll to bottom when loading conversations")

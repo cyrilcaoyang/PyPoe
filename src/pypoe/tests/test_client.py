@@ -6,7 +6,7 @@ import os
 from unittest.mock import patch
 
 from pypoe import PoeChatClient
-from test_conf import test_api_key, mock_env_with_api_key, mock_env_without_api_key
+from .test_conf import test_api_key, mock_env_with_api_key, mock_env_without_api_key
 
 def test_client_initialization_with_api_key(mock_env_with_api_key, test_api_key):
     """Test that PoeChatClient initializes correctly with API key."""

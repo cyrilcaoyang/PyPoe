@@ -8,7 +8,7 @@ This script shows how to:
 3. Test the new history features
 
 Usage:
-    python users/test_web_history.py
+    python -m pypoe.examples.demo_web_history
 """
 
 import asyncio
@@ -16,11 +16,7 @@ import sys
 import os
 from pathlib import Path
 
-# Add src to path so we can import pypoe
-src_path = Path(__file__).parent.parent / "src"
-sys.path.insert(0, str(src_path))
-
-from pypoe.poe.client import PoeChatClient
+from pypoe.core.client import PoeChatClient
 from pypoe.config import get_config
 
 async def demonstrate_conversation_history():
@@ -115,7 +111,7 @@ def main():
     if not os.getenv('POE_API_KEY'):
         print("⚠️  POE_API_KEY not found in environment")
         print("💡 Set it with: export POE_API_KEY='your-api-key'")
-        print("📖 Or copy users/pypoe.env.example to .env and fill in your key")
+        print("📖 Or copy pypoe.env.example to .env and fill in your key")
         return
     
     asyncio.run(demonstrate_conversation_history())

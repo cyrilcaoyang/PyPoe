@@ -35,9 +35,9 @@ except ImportError:
     AsyncSocketModeHandler = None
     SlackApiError = Exception
 
-from ..poe.client import PoeChatClient
-from ..poe.enhanced_history import EnhancedHistoryManager
-from ..config import get_config
+from ...core.client import PoeChatClient
+from ...core.enhanced_history import EnhancedHistoryManager
+from ...config import get_config
 
 # Configure logging
 logger = logging.getLogger(__name__)

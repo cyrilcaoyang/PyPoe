@@ -6,7 +6,7 @@ This script tests the bot locking feature to ensure database consistency
 by preventing bot changes mid-conversation.
 
 Usage:
-    python users/test_bot_locking.py
+    python tests/test_bot_locking.py
     
 Requirements:
     - PyPoe web server running on localhost:8000

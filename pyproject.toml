@@ -30,38 +30,28 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# Option 1: Minimal CLI Only (default installation)
-# pip install -e .
-# Includes: Command line interface only
-# Use for: Automation scripts and minimal deployments
+# Option 1: Default Installation (pip install pypoe)
+# Includes: CLI + Core API + Database + Examples + Scripts
+# Users get everything they need to start using PyPoe
+# Only interfaces require web-ui flag, only tests require dev flag
 
-# Option 2: CLI + Web Interface  
-# pip install -e ".[web-ui]"
-# Includes: Command line tools + web interface
-# Use for: Personal use with both terminal and browser access
+# Option 2: Web UI & Interfaces
+# pip install pypoe[web-ui]  
+# Enables: Web interface + Slack bot (interfaces will work)
 web-ui = [
     "fastapi>=0.104.0",
     "uvicorn[standard]>=0.24.0",
     "jinja2>=3.1.0",
     "python-multipart>=0.0.6",
-]
-
-# Option 3: Complete Installation (All Features)
-# pip install -e ".[all]"
-# Includes: CLI + Web + Slack bot integration  
-# Use for: Team deployments with all interface options
-all = [
-    "pypoe[web-ui]",
     "slack-bolt>=1.18.1",
     "slack-sdk>=3.26.2",
 ]
 
-# Option 4: Development Mode
-# pip install -e ".[dev]" 
-# Includes: Everything + testing tools + development dependencies
-# Use for: Contributing to PyPoe or custom development
+# Option 3: Development Mode
+# pip install pypoe[dev]
+# Adds: Testing tools and development dependencies
 dev = [
-    "pypoe[all]",
+    "pypoe[web-ui]",
     "pytest>=7.0.0",
     "pytest-asyncio>=0.21.0",
     "black>=23.0.0",
@@ -81,4 +71,9 @@ Issues = "https://github.com/your-username/pypoe/issues"
 [tool.setuptools.packages.find]
 where = ["src"]
 include = ["pypoe*"]
-exclude = ["user_scripts*", "tests*"] 
+
+# Include web static files and templates
+[tool.setuptools.package-data]
+"pypoe.interfaces.web" = ["static/**/*", "templates/**/*"]
+"pypoe.scripts.setup" = ["*.md", "*.service"]
+"*" = ["*.py", "*.md", "*.txt", "*.yaml", "*.json"] 

@@ -11,7 +11,7 @@ from pathlib import Path
 # Check if web dependencies are available
 try:
     from .app import run_server, WEB_AVAILABLE
-    from ..config import Config
+    from ...config import Config
 except ImportError:
     WEB_AVAILABLE = False
     run_server = None
@@ -38,7 +38,7 @@ def run_web_server(host: str, port: int, config: Config):
 
 def main():
     """Main function to run the web server."""
-    from ..config import get_config
+    from ...config import get_config
     
     if not WEB_AVAILABLE:
         print("❌ Web UI dependencies not installed!")

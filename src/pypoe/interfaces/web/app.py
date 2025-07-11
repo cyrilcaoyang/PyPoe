@@ -12,9 +12,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import uvicorn
 
-from ..config import get_config, Config
-from ..poe.client import PoeChatClient
-from ..logging_db import logger
+from ...config import get_config, Config
+from ...core.client import PoeChatClient
+from ...logging_db import logger
 
 # TODO: Add support for remote access of the webpage with username and password protection
 # This would involve:

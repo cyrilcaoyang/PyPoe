@@ -8,17 +8,15 @@ This script demonstrates how to run the PyPoe web interface programmatically.
 import asyncio
 import os
 from pathlib import Path
-
-# Add the src directory to path to import pypoe
 import sys
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 try:
     from pypoe import get_config
-    from pypoe.web.app import run_server, WEB_AVAILABLE
+    from pypoe.interfaces.web.app import run_server
+    from pypoe.interfaces.web import WEB_AVAILABLE
 except ImportError as e:
     print(f"❌ Error importing pypoe: {e}")
-    print("Make sure you're running this from the project root and have installed pypoe")
+    print("Make sure you have installed pypoe with: pip install pypoe[web-ui]")
     sys.exit(1)
 
 def main():
