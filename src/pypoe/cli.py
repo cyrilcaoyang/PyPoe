@@ -483,6 +483,208 @@ def daemon():
     """Manage PyPoe web server daemon"""
     pass
 
+# Inline implementations as fallback
+def _start_daemon_inline(host, port):
+    """Inline daemon start implementation"""
+    import os
+    import signal
+    import subprocess
+    import time
+    import platform
+    from pathlib import Path
+    from datetime import datetime
+    
+    # Configuration
+    DAEMON_NAME = "pypoe-web"
+    PID_FILE = Path.home() / f".{DAEMON_NAME}.pid"
+    LOG_FILE = Path.home() / f".{DAEMON_NAME}.log"
+    ERROR_LOG_FILE = Path.home() / f".{DAEMON_NAME}.error.log"
+    
+    # Check if already running
+    if PID_FILE.exists():
+        try:
+            with open(PID_FILE, 'r') as f:
+                pid = int(f.read().strip())
+            os.kill(pid, 0)  # Check if process exists
+            click.echo(f"✅ PyPoe web server is already running (PID: {pid})")
+            return
+        except (ValueError, ProcessLookupError, OSError):
+            PID_FILE.unlink(missing_ok=True)
+    
+    click.echo("🚀 Starting PyPoe web server daemon...")
+    
+    # Create log files
+    LOG_FILE.touch()
+    ERROR_LOG_FILE.touch()
+    
+    # Start the process in background
+    try:
+        with open(LOG_FILE, 'a') as log_file, open(ERROR_LOG_FILE, 'a') as error_file:
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            log_file.write(f"\n=== PyPoe Web Server Started: {timestamp} ===\n")
+            log_file.flush()
+            
+            kwargs = {
+                'stdout': log_file,
+                'stderr': error_file,
+                'stdin': subprocess.DEVNULL,
+                'env': os.environ.copy(),
+            }
+            
+            if platform.system() != "Windows":
+                kwargs['preexec_fn'] = os.setsid
+            
+            process = subprocess.Popen(
+                ['pypoe', 'web', '--host', host, '--port', str(port)],
+                **kwargs
+            )
+            
+            with open(PID_FILE, 'w') as f:
+                f.write(str(process.pid))
+            
+            time.sleep(2)
+            
+            if process.poll() is None:
+                click.echo(f"✅ PyPoe web server started successfully!")
+                click.echo(f"📁 PID: {process.pid}")
+                click.echo(f"📁 Log file: {LOG_FILE}")
+                click.echo(f"🌐 Access at: http://{host}:{port}")
+            else:
+                click.echo("❌ Failed to start PyPoe web server")
+                click.echo(f"📁 Check error log: {ERROR_LOG_FILE}")
+                PID_FILE.unlink(missing_ok=True)
+                
+    except Exception as e:
+        click.echo(f"❌ Error starting daemon: {e}")
+        PID_FILE.unlink(missing_ok=True)
+
+def _stop_daemon_inline():
+    """Inline daemon stop implementation"""
+    import os
+    import signal
+    import time
+    from pathlib import Path
+    from datetime import datetime
+    
+    DAEMON_NAME = "pypoe-web"
+    PID_FILE = Path.home() / f".{DAEMON_NAME}.pid"
+    LOG_FILE = Path.home() / f".{DAEMON_NAME}.log"
+    
+    if not PID_FILE.exists():
+        click.echo("⚠️  PyPoe web server is not running")
+        return
+    
+    try:
+        with open(PID_FILE, 'r') as f:
+            pid = int(f.read().strip())
+        
+        click.echo(f"🛑 Stopping PyPoe web server daemon (PID: {pid})...")
+        
+        os.kill(pid, signal.SIGTERM)
+        
+        # Wait for process to stop
+        for _ in range(10):
+            time.sleep(1)
+            try:
+                os.kill(pid, 0)
+            except ProcessLookupError:
+                break
+        else:
+            click.echo("🔨 Force killing process...")
+            os.kill(pid, signal.SIGKILL)
+        
+        PID_FILE.unlink(missing_ok=True)
+        
+        # Log shutdown
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        with open(LOG_FILE, 'a') as log_file:
+            log_file.write(f"\n=== PyPoe Web Server Stopped: {timestamp} ===\n")
+        
+        click.echo("✅ PyPoe web server stopped successfully")
+        
+    except (ValueError, ProcessLookupError):
+        click.echo("⚠️  Process was already stopped")
+        PID_FILE.unlink(missing_ok=True)
+    except Exception as e:
+        click.echo(f"❌ Error stopping daemon: {e}")
+
+def _status_daemon_inline():
+    """Inline daemon status implementation"""
+    import os
+    import subprocess
+    from pathlib import Path
+    
+    DAEMON_NAME = "pypoe-web"
+    PID_FILE = Path.home() / f".{DAEMON_NAME}.pid"
+    LOG_FILE = Path.home() / f".{DAEMON_NAME}.log"
+    ERROR_LOG_FILE = Path.home() / f".{DAEMON_NAME}.error.log"
+    
+    if not PID_FILE.exists():
+        click.echo("❌ PyPoe web server is not running")
+    else:
+        try:
+            with open(PID_FILE, 'r') as f:
+                pid = int(f.read().strip())
+            os.kill(pid, 0)  # Check if process exists
+            click.echo(f"✅ PyPoe web server is running (PID: {pid})")
+            
+            # Show process info
+            try:
+                result = subprocess.run(['ps', '-p', str(pid), '-o', 'pid,ppid,etime,cmd'], 
+                                      capture_output=True, text=True)
+                if result.returncode == 0:
+                    click.echo("\n📊 Process Information:")
+                    click.echo(result.stdout)
+            except Exception:
+                pass
+                
+        except (ValueError, ProcessLookupError, OSError):
+            click.echo("❌ PyPoe web server is not running")
+            PID_FILE.unlink(missing_ok=True)
+    
+    click.echo(f"\n📁 Files:")
+    click.echo(f"   • PID file: {PID_FILE} {'✅' if PID_FILE.exists() else '❌'}")
+    click.echo(f"   • Log file: {LOG_FILE} {'✅' if LOG_FILE.exists() else '❌'}")
+    click.echo(f"   • Error log: {ERROR_LOG_FILE} {'✅' if ERROR_LOG_FILE.exists() else '❌'}")
+
+def _restart_daemon_inline():
+    """Inline daemon restart implementation"""
+    import time
+    click.echo("🔄 Restarting PyPoe web server daemon...")
+    _stop_daemon_inline()
+    time.sleep(2)
+    _start_daemon_inline('0.0.0.0', 8000)
+
+def _show_logs_inline():
+    """Inline show logs implementation"""
+    import subprocess
+    from pathlib import Path
+    
+    DAEMON_NAME = "pypoe-web"
+    LOG_FILE = Path.home() / f".{DAEMON_NAME}.log"
+    ERROR_LOG_FILE = Path.home() / f".{DAEMON_NAME}.error.log"
+    
+    if not LOG_FILE.exists():
+        click.echo("❌ No log file found")
+        return
+    
+    click.echo(f"📋 Showing last 50 lines of {LOG_FILE}:")
+    click.echo("-" * 50)
+    
+    try:
+        result = subprocess.run(['tail', '-n', '50', str(LOG_FILE)], 
+                              capture_output=True, text=True)
+        if result.returncode == 0:
+            click.echo(result.stdout)
+        else:
+            click.echo("❌ Failed to read log file")
+    except Exception as e:
+        click.echo(f"❌ Error reading log file: {e}")
+    
+    click.echo("-" * 50)
+    click.echo(f"📁 Full log file: {LOG_FILE}")
+    click.echo(f"📁 Error log file: {ERROR_LOG_FILE}")
+
 @daemon.command()
 @click.option('--host', default='0.0.0.0', envvar='PYPOE_HOST', help='Host to bind the server to')
 @click.option('--port', default=8000, envvar='PYPOE_PORT', type=int, help='Port to run the server on')
