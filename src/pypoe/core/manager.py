@@ -121,6 +121,20 @@ class HistoryManager:
             await db.commit()
         
         return conversation_id
+
+    async def create_conversation(self, title: str, bot_name: str = None, chat_mode: str = "chatbot") -> str:
+        """
+        Create a new conversation and return its ID (compatibility method).
+        
+        Args:
+            title: The conversation title
+            bot_name: The bot name (ignored in this implementation)
+            chat_mode: The chat mode (ignored in this implementation)
+            
+        Returns:
+            The conversation ID
+        """
+        return await self.save_conversation(title)
     
     async def save_message(self, conversation_id: str, role: str, content: str) -> int:
         """
@@ -143,6 +157,21 @@ class HistoryManager:
             )
             await db.commit()
             return cursor.lastrowid
+
+    async def add_message(self, conversation_id: str, role: str, content: str, bot_name: str = None) -> int:
+        """
+        Add a message to a conversation (compatibility method).
+        
+        Args:
+            conversation_id: The conversation ID
+            role: The message role ('user' or 'assistant')
+            content: The message content
+            bot_name: The bot name (ignored in this implementation)
+            
+        Returns:
+            The message ID
+        """
+        return await self.save_message(conversation_id, role, content)
     
     async def get_conversations(self, limit: int = 50) -> List[Dict[str, Any]]:
         """

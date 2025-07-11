@@ -36,7 +36,7 @@ class HistoryManager:
                 """)
                 await db.commit()
 
-    async def create_conversation(self, title: str, bot_name: str) -> str:
+    async def create_conversation(self, title: str, bot_name: str, chat_mode: str = "chatbot") -> str:
         """Creates a new conversation and returns its ID."""
         conversation_id = str(uuid.uuid4())
         async with self._lock:
@@ -48,7 +48,7 @@ class HistoryManager:
                 await db.commit()
         return conversation_id
 
-    async def add_message(self, conversation_id: str, role: str, content: str):
+    async def add_message(self, conversation_id: str, role: str, content: str, bot_name: Optional[str] = None):
         """Adds a message to a conversation."""
         async with self._lock:
             async with aiosqlite.connect(self.db_path) as db:
@@ -95,6 +95,10 @@ class HistoryManager:
                         "timestamp": row[2]
                     } for row in rows
                 ]
+
+    async def get_conversation_messages(self, conversation_id: str) -> List[Dict[str, Any]]:
+        """Alias for get_messages for compatibility with other history managers."""
+        return await self.get_messages(conversation_id)
 
     async def delete_conversation(self, conversation_id: str):
         """Deletes a conversation and all its messages."""
