@@ -13,6 +13,7 @@ import sys
 import getpass
 import ipaddress
 import subprocess
+from _path_utils import get_env_file_path, ensure_env_file_exists
 
 def get_tailscale_ip():
     """Try to detect the Tailscale IP address automatically."""
@@ -41,19 +42,13 @@ def setup_webui_credentials():
     print("=" * 25)
     print()
     
-    # Get the project root (where .env should be)
-    # Go up two levels: setup/ -> users/ -> project_root/
-    project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    env_path = os.path.join(project_root, '.env')
-    
     print("Setting up authentication for PyPoe web interface.")
     print("This is recommended for remote access via Tailscale or other networks.")
     print()
     
-    # Check if .env exists
-    if not os.path.exists(env_path):
-        print(f"❌ No .env file found at: {env_path}")
-        print("Please run 'python users/setup/setup_credentials.py' first to set up your API key.")
+    # Check if .env exists using shared utility
+    exists, env_path = ensure_env_file_exists()
+    if not exists:
         return
     
     # Read existing .env content

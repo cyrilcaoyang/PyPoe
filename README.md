@@ -523,8 +523,17 @@ pypoe/
 5. Run tests: `pytest`
 6. Submit a pull request
 
+## 📚 Documentation
+
+For detailed setup and configuration guides:
+
+- **📖 [Complete Documentation](src/pypoe/docs/README.md)** - Start here for comprehensive guides
+- **🚀 [Setup Guide](src/pypoe/docs/README_SETUP.md)** - Installation and configuration
+- **🤖 [Slack Bot Guide](src/pypoe/docs/README_SLACK.md)** - Slack integration setup
+- **⚙️ [Daemon Guide](src/pypoe/docs/README_DAEMON.md)** - Background service management
+
 ## 🆘 Support
 
-- **Issues**: [GitHub Issues](https://github.com/your-username/pypoe/issues)
-- **Documentation**: Check `users/README.md` for examples
+- **Issues**: [GitHub Issues](https://github.com/AccelerationConsortium/pypoe/issues)
+- **Documentation**: Check [src/pypoe/docs/](src/pypoe/docs/) for comprehensive guides
 - **API Reference**: [Poe API Documentation](https://creator.poe.com/docs/quick-start)

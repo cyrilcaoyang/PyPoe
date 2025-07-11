@@ -7,6 +7,7 @@ It will create a .env file in the project root with your API key.
 
 import os
 import sys
+from _path_utils import get_env_file_path
 
 def setup_credentials():
     """Interactive setup for Poe API credentials."""
@@ -14,9 +15,8 @@ def setup_credentials():
     print("=" * 30)
     print()
     
-    # Get the project root (where .env should be)
-    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    env_path = os.path.join(project_root, '.env')
+    # Get the .env file path using shared utility
+    env_path = get_env_file_path()
     
     print("To use PyPoe, you need a Poe API key.")
     print("You can get one from: https://poe.com/api_key")
@@ -68,8 +68,8 @@ POE_API_KEY={api_key}
         print(f"✅ Credentials saved to: {env_path}")
         print()
         print("Setup complete! You can now use PyPoe:")
-        print("1. Try the basic example: python user_scripts/basic_usage.py")
-        print("2. Use the CLI: python -m pypoe --help")
+        print("1. Try the basic example: python src/pypoe/examples/basic_usage.py")
+        print("2. Use the CLI: pypoe --help")
         print("3. Import in your code: from pypoe import PoeChatClient")
 
     except Exception as e:

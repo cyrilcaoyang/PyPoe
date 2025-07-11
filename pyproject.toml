@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pypoe"
-version = "2.0.0"
+version = "2.1.0"
 description = "Python client for Poe.com using the official API"
 readme = "README.md"
 license = {text = "MIT"}
@@ -75,5 +75,6 @@ include = ["pypoe*"]
 # Include web static files and templates
 [tool.setuptools.package-data]
 "pypoe.interfaces.web" = ["static/**/*", "templates/**/*"]
-"pypoe.scripts.setup" = ["*.md", "*.service"]
+"pypoe.scripts.setup" = ["*.service", "*.py"]
+"pypoe.docs" = ["*.md"]
 "*" = ["*.py", "*.md", "*.txt", "*.yaml", "*.json"] 

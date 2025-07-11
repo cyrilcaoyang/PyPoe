@@ -30,10 +30,17 @@
         }
         
         .storage-card {
-            background: #34495e;
-            border-radius: 8px;
-            padding: 20px;
+            background: #ffffff;
+            border-radius: 12px;
+            padding: 24px;
             border-left: 4px solid #3498db;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        
+        .storage-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.12);
         }
         
         .storage-card.warning {
@@ -62,7 +69,8 @@
         
         .card-header h3 {
             margin: 0;
-            color: #ecf0f1;
+            color: #2c3e50;
+            font-weight: 600;
         }
         
         .stat-item {
@@ -70,22 +78,23 @@
             justify-content: space-between;
             margin-bottom: 10px;
             padding: 8px 0;
-            border-bottom: 1px solid #2c3e50;
+            border-bottom: 1px solid #ecf0f1;
         }
         
         .stat-label {
-            color: #bdc3c7;
+            color: #5a6c7d;
+            font-weight: 500;
         }
         
         .stat-value {
-            color: #ecf0f1;
-            font-weight: bold;
+            color: #2c3e50;
+            font-weight: 600;
         }
         
         .progress-bar {
             width: 100%;
             height: 8px;
-            background: #2c3e50;
+            background: #ecf0f1;
             border-radius: 4px;
             overflow: hidden;
             margin: 10px 0;
@@ -109,24 +118,27 @@
             color: white;
             border: none;
             padding: 15px 20px;
-            border-radius: 6px;
+            border-radius: 8px;
             cursor: pointer;
             font-size: 1rem;
             transition: all 0.3s ease;
             display: flex;
             align-items: center;
             justify-content: center;
+            font-weight: 600;
         }
         
         .action-button:hover {
             background: #2980b9;
             transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(52, 152, 219, 0.3);
         }
         
         .action-button:disabled {
-            background: #7f8c8d;
+            background: #bdc3c7;
             cursor: not-allowed;
             transform: none;
+            box-shadow: none;
         }
         
         .action-button i {
@@ -139,20 +151,23 @@
         
         .action-button.danger:hover {
             background: #c0392b;
+            box-shadow: 0 4px 12px rgba(231, 76, 60, 0.3);
         }
         
         .conversations-table {
-            background: #34495e;
-            border-radius: 8px;
+            background: #ffffff;
+            border-radius: 12px;
             overflow: hidden;
             margin-bottom: 20px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.08);
         }
         
         .table-header {
-            background: #2c3e50;
+            background: #f8f9fa;
             padding: 15px 20px;
-            color: #ecf0f1;
-            font-weight: bold;
+            color: #2c3e50;
+            font-weight: 600;
+            border-bottom: 2px solid #ecf0f1;
         }
         
         .conversations-list {
@@ -165,21 +180,25 @@
             grid-template-columns: 2fr 1fr 100px 100px 80px;
             align-items: center;
             padding: 15px 20px;
-            border-bottom: 1px solid #2c3e50;
+            border-bottom: 1px solid #ecf0f1;
             transition: background 0.3s ease;
         }
         
         .conversation-row:hover {
-            background: #3498db;
+            background: #f8f9fa;
+        }
+        
+        .conversation-row:last-child {
+            border-bottom: none;
         }
         
         .conversation-title {
-            color: #ecf0f1;
+            color: #2c3e50;
             font-weight: 500;
         }
         
         .conversation-bot {
-            color: #bdc3c7;
+            color: #5a6c7d;
             font-size: 0.9rem;
         }
         
@@ -190,53 +209,62 @@
             border-radius: 12px;
             font-size: 0.8rem;
             text-align: center;
+            font-weight: 600;
         }
         
         .media-badge.none {
-            background: #7f8c8d;
+            background: #95a5a6;
         }
         
         .message-count {
-            color: #bdc3c7;
+            color: #5a6c7d;
             text-align: center;
+            font-weight: 500;
         }
         
         .loading {
             text-align: center;
             padding: 40px;
-            color: #bdc3c7;
+            color: #7f8c8d;
         }
         
         .error {
-            background: #e74c3c;
-            color: white;
+            background: #f8d7da;
+            color: #721c24;
             padding: 15px;
-            border-radius: 6px;
+            border-radius: 8px;
             margin: 10px 0;
+            border-left: 4px solid #e74c3c;
         }
         
         .success {
-            background: #27ae60;
-            color: white;
+            background: #d4edda;
+            color: #155724;
             padding: 15px;
-            border-radius: 6px;
+            border-radius: 8px;
             margin: 10px 0;
+            border-left: 4px solid #27ae60;
         }
         
         .back-button {
             display: inline-flex;
             align-items: center;
-            background: #7f8c8d;
+            background: #6c757d;
             color: white;
             text-decoration: none;
-            padding: 10px 15px;
-            border-radius: 6px;
+            padding: 12px 18px;
+            border-radius: 8px;
             margin-bottom: 20px;
-            transition: background 0.3s ease;
+            transition: all 0.3s ease;
+            font-weight: 500;
         }
         
         .back-button:hover {
-            background: #95a5a6;
+            background: #5a6268;
+            transform: translateY(-1px);
+            box-shadow: 0 3px 8px rgba(108, 117, 125, 0.3);
+            text-decoration: none;
+            color: white;
         }
         
         .back-button i {
